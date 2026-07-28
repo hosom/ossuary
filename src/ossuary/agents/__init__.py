@@ -1,16 +1,20 @@
-"""The two agents: A investigates one session, B clusters across the corpus."""
+"""The two agents: A investigates one session, B clusters across the corpus.
 
-from .clusterer import build_clusterer_agent, clusterer_usage_limits
+Both are backend-independent: prompts come from `agents.yaml`, tools from
+`agents.tools`, and whoever runs the inference from `ossuary.backends`.
+"""
+
+from .clusterer import build_clusterer_backend
 from .deps import ClustererDeps, ScannerDeps
-from .models import resolve_model
-from .scanner import build_scanner_agent, scanner_usage_limits
+from .scanner import build_scanner_backend, scanner_prompt
+from .tools import clusterer_tools, scanner_tools
 
 __all__ = [
     "ClustererDeps",
     "ScannerDeps",
-    "build_clusterer_agent",
-    "build_scanner_agent",
-    "clusterer_usage_limits",
-    "resolve_model",
-    "scanner_usage_limits",
+    "build_clusterer_backend",
+    "build_scanner_backend",
+    "clusterer_tools",
+    "scanner_prompt",
+    "scanner_tools",
 ]

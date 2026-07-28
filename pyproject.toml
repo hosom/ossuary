@@ -13,10 +13,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+# Inference without an Anthropic API key. Each SDK inherits the credentials the
+# corresponding CLI already holds, so a Claude Pro/Max or Copilot subscription
+# is enough on its own.
+claude-code = ["claude-agent-sdk>=0.2"]
+copilot = ["github-copilot-sdk>=1.0"]
+# The stdio MCP server, which lets Claude Code or Copilot CLI drive a scan
+# themselves rather than Ossuary calling out to a model.
+mcp = ["mcp>=1.2"]
+dev = ["pytest>=8.0", "claude-agent-sdk>=0.2", "mcp>=1.2"]
 
 [project.scripts]
 ossuary = "ossuary.cli:app"
+ossuary-mcp = "ossuary.mcp_server:main"
 
 [build-system]
 requires = ["hatchling"]

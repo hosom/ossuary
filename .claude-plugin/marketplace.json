@@ -1,0 +1,19 @@
+{
+  "name": "ossuary",
+  "owner": {
+    "name": "hosom",
+    "url": "https://github.com/hosom"
+  },
+  "metadata": {
+    "description": "Ossuary: find health issues in local LLM agent session transcripts."
+  },
+  "plugins": [
+    {
+      "name": "ossuary",
+      "source": "./plugins/claude-code/ossuary",
+      "description": "Investigate your local Claude Code, Codex, and Copilot session transcripts. Claude does the reasoning under your own subscription; Ossuary supplies normalized transcripts, shape measurements, and corpus-wide tool statistics over MCP.",
+      "version": "0.1.0",
+      "keywords": ["transcripts", "observability", "agent-health", "postmortem"]
+    }
+  ]
+}

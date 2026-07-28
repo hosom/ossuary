@@ -15,7 +15,6 @@ from ossuary.config import load_config
 from ossuary.models import RunManifest, Session, SessionScan, StoredIssue
 from ossuary.pipeline import issue_id_for, unclustered_issues
 from ossuary.report import build_context, render_html
-from ossuary.store import SessionStore
 
 CONFIG = load_config(Path(__file__).parent.parent / "agents.yaml")
 
@@ -55,9 +54,29 @@ class TestAggregates:
 
 
 class TestScannerAgent:
-    def _run(self, store, session, script):
+    """Agent A through the backend seam, driven by a scripted model.
+
+    The Pydantic AI backend is the one that can be exercised without a
+    credential, so it stands in for all three. What is being tested here is the
+    tool wiring and the deps that every backend shares, not Pydantic AI itself.
+    """
+
+    def _backend(self, script, **overrides):
+        from ossuary.backends import BackendConfig
+        from ossuary.backends.pydantic_ai_backend import PydanticAIBackend
+
+        config = BackendConfig(
+            model="stub",
+            max_turns=overrides.pop("max_turns", CONFIG.scanner.max_turns),
+            extra={"model_object": FunctionModel(script)},
+            **overrides,
+        )
+        return PydanticAIBackend(config)
+
+    def _run(self, store, session, script, **overrides):
         from ossuary.agents.deps import ScannerDeps
-        from ossuary.agents.scanner import build_scanner_agent
+        from ossuary.agents.scanner import scanner_prompt
+        from ossuary.agents.tools import scanner_tools
 
         deps = ScannerDeps(
             store=store,
@@ -65,11 +84,10 @@ class TestScannerAgent:
             session_content_hash=session.content_hash,
             tool_stats=compute_tool_stats([session]),
         )
-        agent = build_scanner_agent(CONFIG.scanner)
-        result = agent.run_sync(
-            f"Investigate.\n\n{store.outline(session.session_id)}",
-            deps=deps,
-            model=FunctionModel(script),
+        result = self._backend(script, **overrides).run(
+            instructions=CONFIG.scanner.prompt,
+            prompt=scanner_prompt(store.outline(session.session_id)),
+            tools=scanner_tools(deps),
         )
         return deps, result
 
@@ -95,7 +113,8 @@ class TestScannerAgent:
         issue = deps.collected[0]
         assert issue.severity == "high" and issue.phase == "harness"
         assert issue.evidence_event_indices == [4, 5], "deduped and sorted"
-        assert result.output == "done"
+        assert result.text == "done"
+        assert not result.hit_turn_cap
 
     def test_all_five_tools_are_registered(self, loaded_store, claude_session):
         seen = []
@@ -137,28 +156,39 @@ class TestScannerAgent:
         assert "ossuary:elided" in captured["reply"]
         assert "read_events again" in captured["reply"]
 
+    def test_a_failing_tool_returns_a_marked_result_instead_of_raising(
+        self, loaded_store, claude_session
+    ):
+        """A malformed tool call is a tool result, not a dead scan.
+
+        Backends disagree about what a raised exception means -- retry, abort,
+        swallow -- and that disagreement would otherwise show up as different
+        findings from the same transcript.
+        """
+        captured = {}
+
+        def script(messages, info):
+            n = len([m for m in messages if m.kind == "response"])
+            if n == 0:
+                return ModelResponse(parts=[ToolCallPart("tool_stats", {})])
+            captured["reply"] = messages[-1].parts[0].content
+            return ModelResponse(parts=[TextPart("done")])
+
+        _, result = self._run(loaded_store, claude_session, script)
+        assert "ossuary:tool-error" in captured["reply"]
+        assert "tool_stats" in captured["reply"]
+        assert result.text == "done", "the run continues past a tool failure"
+
     def test_partial_results_survive_a_turn_cap(self, loaded_store, claude_session):
         """Incremental reporting is what makes a cutoff yield partial results."""
-        from pydantic_ai import UsageLimits
-        from pydantic_ai.exceptions import UsageLimitExceeded
-
-        from ossuary.agents.deps import ScannerDeps
-        from ossuary.agents.scanner import build_scanner_agent
-
         def script(messages, info):
             n = len([m for m in messages if m.kind == "response"])
             return ModelResponse(parts=[ToolCallPart("report_issue", {
                 "title": f"issue {n}", "description": "d", "severity": "low",
                 "phase": "tool", "evidence_event_indices": [0], "confidence": 0.5})])
 
-        deps = ScannerDeps(
-            store=loaded_store, session_id=claude_session.session_id,
-            session_content_hash=claude_session.content_hash, tool_stats=[],
-        )
-        agent = build_scanner_agent(CONFIG.scanner)
-        with pytest.raises(UsageLimitExceeded):
-            agent.run_sync("go", deps=deps, model=FunctionModel(script),
-                           usage_limits=UsageLimits(request_limit=3))
+        deps, result = self._run(loaded_store, claude_session, script, max_turns=3)
+        assert result.hit_turn_cap, "a cap hit is an outcome, not an exception"
         assert len(deps.collected) >= 2, "work done before the cap must not be lost"
 
     def test_tool_responses_are_cached_by_file_content(self, loaded_store, claude_session, tmp_path):
