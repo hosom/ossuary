@@ -68,7 +68,7 @@ claude --plugin-dir ./plugins/claude-code/ossuary
 
 | Component | What it does |
 | --- | --- |
-| `.mcp.json` | Starts `ossuary-mcp` via `uvx --from ossuary` |
+| `.mcp.json` | Starts `ossuary-mcp` via `uvx --from ${CLAUDE_PLUGIN_ROOT}/../../..` — the bundled repo, no network |
 | `skills/investigate` | Model-invoked. The method: read the outline in full, follow the shapes, check corpus stats before calling a tool abnormal |
 | `/ossuary:report` | Renders HTML from recorded findings; no inference |
 | `agents/session-investigator` | Read tools plus `report_issue`, nothing else — one spawned per session, so each transcript gets its own context window |
@@ -123,13 +123,29 @@ guessed would be worse than one that admits it does not know.
 - `OSSUARY_NO_REDACT` — disable redaction. Transcripts then reach the host agent
   verbatim, credentials included. On by default because the host is a model too.
 
-To run it outside a plugin:
+To run it outside a plugin, from a checkout:
 
 ```bash
-uvx --from ossuary ossuary-mcp
+uvx --from /path/to/ossuary ossuary-mcp
 ```
 
 or add it to a project's `.mcp.json` directly.
+
+### Why the manifests point at a path
+
+Neither plugin fetches anything. `${CLAUDE_PLUGIN_ROOT}` is the plugin's own
+directory, and both plugins ship inside the repository that provides the
+package, so `../../..` from there is the project itself — whether you loaded it
+with `--plugin-dir` from a working copy or installed it from the marketplace,
+which clones the same repository.
+
+The two alternatives were tried and both shipped broken. A bare `--from ossuary`
+installs an unrelated PyPI project of that name (a dice analysis toolkit), and a
+`git+` URL to the default branch installs whatever that branch happens to
+contain, which is not necessarily this package. In both cases the only symptom
+is a plugin whose tools never appear, and a JSON-RPC error with no detail.
+`tests/test_plugins.py` now resolves the source and checks it lands on a
+pyproject declaring the entry point the manifest goes on to run.
 
 ## What the plugin does not give you
 

@@ -2,7 +2,11 @@
   "mcpServers": {
     "ossuary": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/hosom/ossuary", "ossuary-mcp"],
+      "args": [
+        "--from",
+        "${CLAUDE_PLUGIN_ROOT}/../../..",
+        "ossuary-mcp"
+      ],
       "env": {}
     }
   }

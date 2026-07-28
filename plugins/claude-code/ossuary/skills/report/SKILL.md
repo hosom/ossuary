@@ -10,7 +10,7 @@ no model, which is why it is a separate step from investigating — the report
 gets looked at far more often than it gets produced.
 
 ```bash
-uvx --from ossuary ossuary report --no-open
+uvx --from "$CLAUDE_PLUGIN_ROOT/../../.." ossuary report --no-open
 ```
 
 If there are no artifacts yet, the command says so. Findings only reach disk

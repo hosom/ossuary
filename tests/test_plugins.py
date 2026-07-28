@@ -101,17 +101,44 @@ class TestManifests:
     @pytest.mark.parametrize(
         "path", [CLAUDE / ".mcp.json", COPILOT / ".mcp.json"], ids=["claude", "copilot"]
     )
-    def test_mcp_manifest_names_an_unambiguous_source(self, path: Path):
-        """`--from ossuary` resolves to an unrelated PyPI project (a dice toolkit).
+    def test_mcp_manifest_source_resolves_to_this_package(self, path: Path):
+        """The `--from` argument has to name something that is actually this project.
 
-        Whatever this points at has to identify *this* project explicitly -- a
-        bare distribution name silently installs someone else's package, and the
-        only symptom is a plugin whose tools never appear.
+        This has now been got wrong twice, in two different ways, and both times
+        the only symptom was a plugin whose tools never appeared:
+
+          * `--from ossuary` installed an unrelated PyPI project -- the name is
+            taken by a dice analysis toolkit.
+          * `--from git+.../hosom/ossuary` pointed at the default branch, which
+            did not yet contain the package at all.
+
+        So this does not check the spelling, it resolves the thing. The plugin
+        ships inside the repository that provides the package, so substituting
+        `${CLAUDE_PLUGIN_ROOT}` must land on a real pyproject declaring the
+        `ossuary-mcp` entry point the manifest goes on to invoke.
         """
-        args = json.loads(path.read_text(encoding="utf-8"))["mcpServers"]["ossuary"]["args"]
+        server = json.loads(path.read_text(encoding="utf-8"))["mcpServers"]["ossuary"]
+        args = server["args"]
         source = args[args.index("--from") + 1]
-        assert source != "ossuary", "a bare name resolves to the wrong PyPI project"
-        assert "hosom/ossuary" in source or source.startswith((".", "/")), source
+
+        assert source != "ossuary", (
+            "a bare distribution name resolves to an unrelated PyPI project"
+        )
+        assert "${CLAUDE_PLUGIN_ROOT}" in source, (
+            "point at the bundled repository rather than the network: a remote "
+            "source can be unreachable, stale, or not yet published"
+        )
+
+        resolved = Path(source.replace("${CLAUDE_PLUGIN_ROOT}", str(path.parent))).resolve()
+        pyproject = resolved / "pyproject.toml"
+        assert pyproject.exists(), f"{source} resolves to {resolved}, which is not a project"
+
+        text = pyproject.read_text(encoding="utf-8")
+        assert 'name = "ossuary"' in text, f"{resolved} is some other project"
+        entry_point = args[-1]
+        assert f"{entry_point} =" in text, (
+            f"{resolved} declares no {entry_point!r} script for the manifest to run"
+        )
 
     def test_marketplace_points_at_a_real_plugin(self):
         entry = json.loads(MARKETPLACE.read_text(encoding="utf-8"))["plugins"][0]

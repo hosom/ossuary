@@ -3,8 +3,14 @@
     "ossuary": {
       "type": "local",
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/hosom/ossuary", "ossuary-mcp"],
-      "tools": ["*"],
+      "args": [
+        "--from",
+        "${CLAUDE_PLUGIN_ROOT}/../../..",
+        "ossuary-mcp"
+      ],
+      "tools": [
+        "*"
+      ],
       "env": {}
     }
   }
