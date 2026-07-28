@@ -30,6 +30,11 @@ that carries a structure `NormalizedEvent` cannot currently express — a
 conversation tree. One decision (below) has to be made before any code is
 written; everything else is mechanical.
 
+Scope: **the adapter is the whole of pi support.** The host half was investigated
+and deferred — a pi user reads their pi sessions from Claude Code or Copilot,
+using the plugin that already ships. The reasoning is in
+[Decision](#decision-the-adapter-alone).
+
 ---
 
 ## Layout and discovery
@@ -331,6 +336,11 @@ word "pi".
 
 # pi as a host
 
+**Investigated and deferred — see [Decision](#decision-the-adapter-alone) at the
+end of this section.** pi sessions are readable from Claude Code or Copilot the
+moment the adapter exists, which is what "supporting pi" needs to mean for now.
+This is the record of what the other route would have cost.
+
 pi has a plugin system, and most of the Ossuary plugin ports into it unchanged.
 Two things do not, and they are the two the plugin is built on.
 
@@ -433,14 +443,25 @@ Even done well:
   checks is a subprocess argv rather than frontmatter, which is a different kind
   of assertion.
 
-## Staging
+## Decision: the adapter alone
 
-The two halves are independent and the first is much cheaper:
+**The host half is not being built.** The adapter is the whole of pi support:
+write it, and a pi user investigates their pi sessions from Claude Code or
+Copilot, with the plugin that already exists.
 
-1. **Skills + MCP extension.** *"Have a look at my recent sessions"* works
-   end-to-end, single-session-at-a-time. This is the parity that matters.
-2. **The subagent spawner**, for `investigate` across a corpus.
-3. **The adapter** (first half of this document), so pi can read its own
-   transcripts. Independent of both — worth noting that today a pi user
-   investigating with Ossuary would find every session on the machine *except*
-   their own.
+Nothing above is load-bearing for that. Ossuary has never required the host to
+match the source — a Claude Code user audits their Codex sessions today, and the
+corpus statistics are computed *across* sources on purpose. `ossuary_sources`
+lists what is on disk regardless of who is asking; discovery, redaction, the
+outline and `ossuary_tool_stats` all work from the file. Mixing pi in is a small
+gain rather than a compromise: pi's 51200-byte tool cap becomes visible next to
+Claude Code's 30000, which is exactly the comparison no single session can show.
+
+What it costs, stated plainly: **someone who runs only pi cannot use Ossuary.**
+That is the whole of what the host work would buy, and it can be bought later —
+the two halves share no code, so building the extension in six months costs the
+same as building it now. What does not wait is the adapter: until it exists, a pi
+user pointed at Ossuary finds every session on the machine *except* their own.
+
+The rest of this section stands as the record of what the host route would
+involve, so the decision can be revisited without re-deriving it.
