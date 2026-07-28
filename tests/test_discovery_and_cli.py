@@ -136,6 +136,7 @@ def _record_a_finding(cwd: Path) -> None:
     server = build_server([GOLDEN / "claude-code"], redact=True)
 
     def call(tool, /, **arguments):
+        # Return shape differs between mcp majors; nothing here reads it.
         return anyio.run(lambda: server.call_tool(tool, arguments))
 
     call(

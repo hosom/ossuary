@@ -98,18 +98,40 @@ class _State:
         raise ValueError(f"{session_id!r} is ambiguous: {', '.join(matches[:8])}")
 
 
-def build_server(roots: list[Path] | None = None, *, redact: bool = True) -> Any:
-    """Construct the FastMCP server. Importing this module must not need `mcp`."""
+def _server_class() -> Any:
+    """The MCP SDK's ergonomic server, under whichever name this major uses.
+
+    `FastMCP` was renamed `MCPServer` in mcp 2.0 and the old import path removed.
+    The surface Ossuary depends on -- the `tool` decorator, `list_tools`,
+    `call_tool`, and a stdio `run` -- is the same in both, so both are supported
+    rather than pinning to the superseded major.
+
+    Import failures are re-raised with the original error attached. A bare "the
+    SDK is missing" would be a lie on any machine where it is installed but
+    incompatible, which is exactly the case worth diagnosing quickly.
+    """
     try:
-        from mcp.server.fastmcp import FastMCP
-    except ImportError as exc:  # pragma: no cover - optional dependency
+        from mcp.server.fastmcp import FastMCP  # mcp 1.x
+
+        return FastMCP
+    except ImportError:
+        pass
+    try:
+        from mcp.server import MCPServer  # mcp 2.x
+
+        return MCPServer
+    except ImportError as exc:
         raise RuntimeError(
-            "the MCP SDK is missing; it is a core dependency, so reinstall: "
-            "pip install ossuary"
+            "the installed MCP SDK exposes neither mcp.server.fastmcp.FastMCP "
+            f"(1.x) nor mcp.server.MCPServer (2.x): {exc}. `mcp` is a core "
+            "dependency of ossuary, so reinstall with: pip install ossuary"
         ) from exc
 
+
+def build_server(roots: list[Path] | None = None, *, redact: bool = True) -> Any:
+    """Construct the MCP server. Importing this module must not need `mcp`."""
     state = _State(roots, redact=redact)
-    mcp = FastMCP(SERVER_NAME)
+    mcp = _server_class()(SERVER_NAME)
 
     @mcp.tool()
     def ossuary_sources() -> str:

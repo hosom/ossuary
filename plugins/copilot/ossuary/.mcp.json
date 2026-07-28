@@ -3,7 +3,7 @@
     "ossuary": {
       "type": "local",
       "command": "uvx",
-      "args": ["--from", "ossuary", "ossuary-mcp"],
+      "args": ["--from", "git+https://github.com/hosom/ossuary", "ossuary-mcp"],
       "tools": ["*"],
       "env": {}
     }

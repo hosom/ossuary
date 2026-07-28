@@ -58,7 +58,11 @@ def call(server, tool, /, **arguments) -> str:
     `ossuary_propose_cluster` has -- cannot collide with the helper's own.
     """
     result = anyio.run(lambda: server.call_tool(tool, arguments))
-    blocks = result[0] if isinstance(result, tuple) else result
+    # mcp 1.x hands back the content blocks (sometimes in a tuple with the
+    # structured result); 2.x wraps them in a result object.
+    blocks = getattr(result, "content", result)
+    if isinstance(blocks, tuple):
+        blocks = blocks[0]
     return "\n".join(getattr(block, "text", str(block)) for block in blocks)
 
 
@@ -73,7 +77,9 @@ class TestToolSurface:
 
     def test_schemas_are_serializable(self, server):
         for tool in anyio.run(server.list_tools):
-            assert json.loads(json.dumps(tool.inputSchema))["type"] == "object"
+            # `inputSchema` on mcp 1.x, `input_schema` on 2.x.
+            schema = getattr(tool, "inputSchema", None) or tool.input_schema
+            assert json.loads(json.dumps(schema))["type"] == "object"
 
 
 class TestReads:
