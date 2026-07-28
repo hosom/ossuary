@@ -1,7 +1,7 @@
 ---
 name: session-investigator
 description: Investigates exactly one LLM agent session transcript end to end and reports the issues it finds. Spawn one per session when auditing several, so each investigation gets its own context window.
-tools: mcp__ossuary__ossuary_outline, mcp__ossuary__ossuary_read_events, mcp__ossuary__ossuary_search_session, mcp__ossuary__ossuary_read_event_slice, mcp__ossuary__ossuary_tool_stats, mcp__ossuary__ossuary_report_issue
+tools: mcp__plugin_ossuary_ossuary__ossuary_outline, mcp__plugin_ossuary_ossuary__ossuary_read_events, mcp__plugin_ossuary_ossuary__ossuary_search_session, mcp__plugin_ossuary_ossuary__ossuary_read_event_slice, mcp__plugin_ossuary_ossuary__ossuary_tool_stats, mcp__plugin_ossuary_ossuary__ossuary_report_issue
 ---
 
 You investigate a single session transcript from an LLM coding agent, looking

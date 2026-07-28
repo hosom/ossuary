@@ -46,6 +46,7 @@ credentials it already holds.
 
 ```bash
 uv venv && uv pip install -e .
+source .venv/bin/activate    # the bare `ossuary ...` commands below need this
 ```
 
 Then install the plugin for whichever agent you use:
@@ -76,6 +77,17 @@ findings written down it calls `ossuary_write_run`, and then:
 ```bash
 ossuary report                   # renders .ossuary/run.json to a single HTML file
 ```
+
+The Claude Code plugin ships the same two steps as commands:
+
+```
+/ossuary:investigate             # audit what is on disk, one subagent per session
+/ossuary:report                  # render the findings that were written down
+```
+
+Nothing reaches disk until `ossuary_write_run` runs, so an investigation you
+abandon leaves no artifacts behind. Writing a run archives the previous one
+under `.ossuary/runs/` rather than replacing it.
 
 The CLI is the deterministic surface around that — nothing here calls a model:
 
@@ -118,7 +130,12 @@ already holding opinions about the first, and findings stop being independent.
 The per-session agent is granted the read tools and `report_issue` and nothing
 else — no way to reach a second transcript, no way to end the run — and
 `tests/test_plugins.py` asserts that, so widening it fails the suite instead of
-quietly costing recall. See [`docs/plugins.md`](docs/plugins.md).
+quietly costing recall. That check normalises the `mcp__<server>__` prefix away
+before comparing, so it constrains *which* tools an agent may hold but not
+whether the names resolve under the namespace the host actually uses: a plugin
+server the host exposes as `mcp__plugin_ossuary_ossuary__*` will not match an
+agent asking for `mcp__ossuary__*`, and the suite passes either way while every
+spawn gets an empty toolset. See [`docs/plugins.md`](docs/plugins.md).
 
 **Adapters parse like archaeologists, not validators.** No line is ever rejected.
 A malformed line becomes a degraded event carrying its raw text and the parse
