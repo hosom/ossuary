@@ -3,358 +3,823 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ossuary report &mdash; {{ manifest.run_id }}</title>
+<title>Ossuary &mdash; run {{ manifest.run_id }}</title>
 <style>
-  /* Everything inline: this file must work as a ticket attachment with no network. */
+  /* Everything inline: this file must work as a ticket attachment with no
+     network. That rules out the brand's webfonts, so each role falls back down
+     a stack that keeps its character -- inscriptional caps, an old-style serif,
+     a tabular mono. */
   :root {
-    --bg: #ffffff; --fg: #1a1a1a; --muted: #6b7280; --line: #e5e7eb;
-    --panel: #f9fafb; --accent: #1f6feb; --code-bg: #f6f8fa;
-    --high: #b42318; --high-bg: #fef3f2; --medium: #b54708; --medium-bg: #fffaeb;
-    --low: #175cd3; --low-bg: #eff8ff; --new: #027a48; --new-bg: #ecfdf3;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --line: #30363d;
-      --panel: #161b22; --accent: #58a6ff; --code-bg: #161b22;
-      --high: #ff7b72; --high-bg: #2d1618; --medium: #e3b341; --medium-bg: #2b2411;
-      --low: #79c0ff; --low-bg: #0f2438; --new: #56d364; --new-bg: #0f2b18;
-    }
+    --void: #12100E; --pit: #0E0C0B; --panel: #1A1715; --crypt: #1C1917;
+    --seam: #2A2723; --bone: #E6DFD1; --dust: #8C867D; --ash: #5A554D;
+    --faint: #6E6A63; --dim: #4A463F; --quiet: #7C766D; --body-fg: #A39D93;
+    --verdigris: #4E8F7C; --rust: #9C4A3C; --brass: #C8A24A;
+    --verdigris-fg: #7FB8A5; --rust-fg: #C97F6E; --brass-fg: #D6B978;
+    --verdigris-edge: #2F5A4E; --rust-edge: #6B3328; --brass-edge: #6B5A2B;
+    --verdigris-wash: #15211D; --rust-wash: #231512; --brass-wash: #221D12;
+    --ash-wash: #171513;
+    --display: "Cinzel", "Trajan Pro", Optima, "Palatino Linotype", Palatino, Georgia, serif;
+    --body: "Spectral", Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; padding: 0 1.25rem 4rem; background: var(--bg); color: var(--fg);
-    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  html, body { margin: 0; padding: 0; background: var(--void); }
+  body { color: var(--bone); font-family: var(--body); font-weight: 300; padding-bottom: 140px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 48px; }
+
+  /* ---- masthead ---- */
+  .masthead {
+    position: sticky; top: 0; z-index: 20; background: rgba(18,16,14,.95);
+    backdrop-filter: blur(6px); border-bottom: 1px solid var(--seam);
   }
-  .wrap { max-width: 1100px; margin: 0 auto; }
-  header { padding: 2rem 0 1rem; border-bottom: 1px solid var(--line); margin-bottom: 1.5rem; }
-  h1 { margin: 0 0 .25rem; font-size: 1.6rem; letter-spacing: -.01em; }
-  h2 { margin: 2.5rem 0 .75rem; font-size: 1.2rem; padding-bottom: .35rem; border-bottom: 1px solid var(--line); }
-  h3 { margin: 0 0 .35rem; font-size: 1rem; }
-  .sub { color: var(--muted); font-size: .875rem; }
-  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .82rem; }
+  .masthead .wrap {
+    padding-top: 16px; padding-bottom: 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  }
+  .lockup { display: flex; align-items: center; gap: 12px; }
+  .wordmark {
+    font-family: var(--display); font-size: 15px; letter-spacing: 5px;
+    text-transform: uppercase; color: var(--bone);
+  }
+  .masthead-meta {
+    display: flex; align-items: center; gap: 28px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.8px; color: var(--faint);
+  }
+  .masthead-meta .dimmed { color: var(--dim); }
+
+  /* ---- type roles ---- */
+  .kicker {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 3.4px;
+    color: var(--faint); text-transform: uppercase;
+  }
+  .label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 2.2px;
+    color: var(--verdigris); text-transform: uppercase;
+  }
+  .mono { font-family: var(--mono); }
+  .data { font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px; color: var(--faint); }
+  h1 {
+    margin: 0; font-family: var(--display); font-weight: 400; font-size: 44px;
+    line-height: 1.16; letter-spacing: 1.5px; color: var(--bone);
+    max-width: 26ch; text-wrap: pretty;
+  }
+  .sec { display: flex; align-items: baseline; gap: 18px; padding: 84px 0 20px; }
+  .sec-n { font-family: var(--mono); font-size: 11px; letter-spacing: 2.4px; color: var(--verdigris); }
+  h2 {
+    margin: 0; font-family: var(--display); font-weight: 400; font-size: 23px;
+    letter-spacing: 5px; text-transform: uppercase; color: var(--bone);
+  }
+  h3 { margin: 0; font-family: var(--body); font-weight: 400; font-size: 17px; line-height: 1.4; color: var(--bone); }
+  .prose { font-size: 16px; line-height: 1.6; color: var(--dust); max-width: 64ch; text-wrap: pretty; }
+  .sec + .prose { padding-bottom: 32px; }
+  code { font-family: var(--mono); font-size: .88em; color: var(--body-fg); }
+
+  /* ---- hero ---- */
+  .hero { padding-top: 72px; }
+  .hero .kicker { padding-bottom: 22px; }
+  .hero-status { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 26px; }
+  .verdict {
+    display: grid; grid-template-columns: 5px 1fr; margin-top: 44px;
+    border: 1px solid var(--seam); background: var(--panel);
+  }
+  .verdict-body { padding: 34px 36px; display: flex; flex-direction: column; gap: 18px; }
+  .verdict-lede { font-size: 21px; line-height: 1.55; color: var(--bone); max-width: 62ch; text-wrap: pretty; }
+  .verdict-detail { font-size: 16px; line-height: 1.62; color: var(--dust); max-width: 68ch; text-wrap: pretty; }
+
+  /* ---- chips: mono uppercase, 6px dot, colour never alone ---- */
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px; padding: 7px 13px;
+    border: 1px solid var(--seam); background: var(--ash-wash);
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.8px;
+    text-transform: uppercase; color: var(--dust); white-space: nowrap;
+  }
+  .chip i { width: 6px; height: 6px; border-radius: 50%; background: var(--ash); }
+  .chip-high, .chip-failed { border-color: var(--rust-edge); background: var(--rust-wash); color: var(--rust-fg); }
+  .chip-high i, .chip-failed i { background: var(--rust); }
+  .chip-medium, .chip-degraded { border-color: var(--brass-edge); background: var(--brass-wash); color: var(--brass-fg); }
+  .chip-medium i, .chip-degraded i { background: var(--brass); }
+  .chip-low { border-color: var(--seam); background: var(--ash-wash); color: var(--dust); }
+  .chip-low i { background: var(--bone); }
+  .chip-clean, .chip-passed, .chip-new { border-color: var(--verdigris-edge); background: var(--verdigris-wash); color: var(--verdigris-fg); }
+  .chip-clean i, .chip-passed i, .chip-new i { background: var(--verdigris); }
+  .chip-sm { padding: 5px 10px; font-size: 9.5px; letter-spacing: 1.6px; }
+  .chip-sm i { width: 5px; height: 5px; }
+
+  /* ---- gridded panels: 1px seams, no radii ---- */
+  .grid { display: grid; gap: 1px; background: var(--seam); border: 1px solid var(--seam); }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  .grid-2 { grid-template-columns: 1.4fr 1fr; }
+  .grid.attach { border-top: none; }
+  .cell { background: var(--pit); padding: 24px 26px 26px; display: flex; flex-direction: column; gap: 11px; }
+  .cell-label { font-family: var(--mono); font-size: 9.5px; letter-spacing: 2px; color: var(--faint); text-transform: uppercase; }
+  .cell-value { font-family: var(--mono); font-size: 24px; letter-spacing: -.4px; color: var(--bone); }
+  .cell-value.small { font-size: 13px; letter-spacing: 0; overflow-wrap: anywhere; }
+  .cell-note { font-size: 13.5px; line-height: 1.5; color: var(--quiet); }
+  .v-rust { color: var(--rust-fg); } .v-brass { color: var(--brass-fg); }
+  .v-verdigris { color: var(--verdigris-fg); } .v-ash { color: var(--ash); }
+  .panel { background: var(--pit); padding: 34px 36px; display: flex; flex-direction: column; gap: 24px; }
+  .plate { border: 1px solid var(--seam); background: var(--pit); padding: 34px 36px 30px; }
+
+  /* ---- the dot strip: one dot = one session ---- */
+  .strip { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ash); }
+  .bars { display: flex; align-items: flex-end; gap: 5px; height: 72px; margin-top: 26px; }
+  .bar { width: 10px; background: var(--ash); opacity: .55; }
+  /* Single-class selectors, declared after .dot/.bar, so the severity colour wins. */
+  .d-high { background: var(--rust); } .d-medium { background: var(--brass); }
+  .d-low { background: var(--bone); } .d-clean { background: var(--verdigris); }
+  .d-error { background: var(--ash); } .d-verdigris { background: var(--verdigris); }
+  .d-rust { background: var(--rust); }
+  .strip-foot {
+    display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--seam);
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px; color: var(--dim);
+  }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .legend i { width: 6px; height: 6px; border-radius: 50%; }
+
+  /* ---- meters ---- */
+  .meters { display: flex; flex-direction: column; gap: 18px; }
+  .meter { display: flex; flex-direction: column; gap: 9px; }
+  .meter-head {
+    display: flex; justify-content: space-between; gap: 16px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px; color: var(--dust);
+  }
+  .meter-head b { font-weight: 400; color: var(--bone); }
+  .meter-track { height: 7px; background: var(--crypt); }
+  .meter-fill { height: 7px; background: var(--verdigris); }
+  .meter-fill.f-high { background: var(--rust); } .meter-fill.f-medium { background: var(--brass); }
+  .meter-fill.f-low { background: var(--bone); } .meter-fill.f-clean { background: var(--verdigris); }
+  .toolrows { display: flex; flex-direction: column; gap: 1px; background: var(--crypt); }
+  .toolrow {
+    background: var(--pit); display: flex; justify-content: space-between;
+    align-items: center; gap: 16px; padding: 11px 0;
+  }
+  .toolrow-name { font-family: var(--mono); font-size: 12px; color: var(--body-fg); }
+  .toolrow-right { display: flex; align-items: center; gap: 12px; }
+  .toolrow-dots { display: flex; gap: 3px; }
+  .toolrow-dots i { width: 6px; height: 6px; border-radius: 50%; }
+  .toolrow-count { font-family: var(--mono); font-size: 11px; color: var(--faint); min-width: 42px; text-align: right; }
+  .approx { color: var(--dim); }
+  .caption { font-size: 13.5px; line-height: 1.55; color: var(--quiet); text-wrap: pretty; }
+
+  /* ---- cluster / issue rows ---- */
+  .rows { display: flex; flex-direction: column; gap: 1px; background: var(--seam); border: 1px solid var(--seam); }
+  details.row { background: var(--pit); }
+  details.row > summary {
+    display: grid; grid-template-columns: 62px 1fr auto auto; gap: 24px;
+    align-items: center; padding: 22px 28px; cursor: pointer; list-style: none;
+  }
+  details.row > summary::-webkit-details-marker { display: none; }
+  details.row > summary:hover { background: #141210; }
+  .row-n { font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px; color: var(--dim); }
+  .row-main { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+  .row-title { font-size: 18.5px; line-height: 1.4; color: var(--bone); text-wrap: pretty; }
+  .row-locus {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px;
+    color: var(--faint); text-transform: uppercase;
+  }
+  .row-caret { font-family: var(--mono); font-size: 15px; color: var(--dim); width: 16px; text-align: center; }
+  .row-caret::after { content: "+"; }
+  details.row[open] .row-caret::after { content: "\2013"; }
+  .row-body { padding: 4px 28px 30px 114px; display: flex; flex-direction: column; gap: 20px; }
+  .row-body > .prose { font-size: 16.5px; line-height: 1.68; color: var(--body-fg); max-width: 70ch; }
+  .provenance {
+    display: flex; gap: 36px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px; color: var(--faint);
+  }
+  .finding { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+  .finding-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .finding-body { font-size: 15.5px; line-height: 1.62; color: var(--dust); max-width: 70ch; text-wrap: pretty; }
+  .evidence-head {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px;
+    color: var(--faint); text-transform: uppercase; margin-top: 6px;
+  }
   pre {
-    background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px;
-    padding: .7rem .85rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
-    margin: .5rem 0 0;
+    margin: 0; border-left: 2px solid var(--seam); padding: 4px 0 4px 20px;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.75; color: var(--dust);
+    white-space: pre-wrap; word-break: break-word; overflow-x: auto;
   }
-  .cards { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1.25rem 0; }
-  .card {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-    padding: .7rem 1rem; min-width: 120px; flex: 1 1 120px;
+
+  /* ---- controls ---- */
+  .sec-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  .switches { display: flex; gap: 1px; background: var(--seam); border: 1px solid var(--seam); }
+  .switches button {
+    margin: 0; border: 0; background: var(--pit); padding: 8px 15px; cursor: pointer;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.8px;
+    color: var(--faint); text-transform: uppercase;
   }
-  .card .n { font-size: 1.5rem; font-weight: 600; display: block; line-height: 1.2; }
-  .card .l { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
-  .tag {
-    display: inline-block; padding: .1rem .45rem; border-radius: 4px;
-    font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
-    vertical-align: middle;
+  .switches button:hover { color: var(--bone); }
+  .switches button[aria-pressed="true"] { background: var(--crypt); color: var(--bone); }
+
+  /* ---- tables ---- */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--seam); background: var(--pit); }
+  table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 11.5px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--seam); white-space: nowrap; }
+  th {
+    color: var(--faint); font-weight: 400; text-transform: uppercase;
+    font-size: 9.5px; letter-spacing: 1.8px; background: var(--crypt);
   }
-  .sev-high { color: var(--high); background: var(--high-bg); }
-  .sev-medium { color: var(--medium); background: var(--medium-bg); }
-  .sev-low { color: var(--low); background: var(--low-bg); }
-  .tag-new { color: var(--new); background: var(--new-bg); }
-  .tag-phase { color: var(--muted); background: var(--panel); border: 1px solid var(--line); }
-  details.cluster {
-    border: 1px solid var(--line); border-radius: 8px; margin-bottom: .75rem;
-    background: var(--panel); overflow: hidden;
-  }
-  details.cluster > summary {
-    cursor: pointer; padding: .8rem 1rem; list-style: none; display: flex;
-    align-items: baseline; gap: .6rem; flex-wrap: wrap;
-  }
-  details.cluster > summary::-webkit-details-marker { display: none; }
-  details.cluster > summary::before { content: "\25B8"; color: var(--muted); font-size: .8rem; }
-  details.cluster[open] > summary::before { content: "\25BE"; }
-  details.cluster > summary:hover { background: var(--code-bg); }
-  .cluster-name { font-weight: 600; flex: 1 1 auto; }
-  .cluster-count { color: var(--muted); font-size: .82rem; white-space: nowrap; }
-  .cluster-body { padding: 0 1rem 1rem; border-top: 1px solid var(--line); }
-  .issue {
-    border-left: 3px solid var(--line); padding: .6rem 0 .6rem .85rem; margin: .9rem 0;
-  }
-  .issue.sev-high-b { border-left-color: var(--high); }
-  .issue.sev-medium-b { border-left-color: var(--medium); }
-  .issue.sev-low-b { border-left-color: var(--low); }
-  .meta { color: var(--muted); font-size: .78rem; margin-top: .3rem; }
-  table { border-collapse: collapse; width: 100%; font-size: .82rem; margin-top: .5rem; }
-  th, td { text-align: left; padding: .4rem .55rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: .7rem; letter-spacing: .04em; }
-  tbody tr:hover { background: var(--panel); }
+  td { color: var(--body-fg); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: #141210; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .warn { color: var(--medium); }
-  .table-scroll { overflow-x: auto; }
-  .empty { color: var(--muted); font-style: italic; padding: .6rem 0; }
+  .warn { color: var(--brass-fg); }
+  .bad { color: var(--rust-fg); }
+  .inert { color: var(--dim); }
+
   .note {
-    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent);
-    border-radius: 6px; padding: .7rem .9rem; margin: 1rem 0; font-size: .85rem;
+    border: 1px solid var(--seam); border-left: 3px solid var(--brass);
+    background: var(--pit); padding: 22px 26px; margin-top: 32px;
+    display: flex; flex-direction: column; gap: 10px;
   }
-  .ev-head { color: var(--muted); font-size: .76rem; margin-top: .5rem; }
-  a { color: var(--accent); }
-  .controls { margin: 1rem 0; display: flex; gap: .5rem; flex-wrap: wrap; }
-  button {
-    font: inherit; font-size: .82rem; padding: .35rem .7rem; cursor: pointer;
-    background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
+  .note ul { margin: 0; padding-left: 20px; }
+  .note li { font-size: 14.5px; line-height: 1.6; color: var(--dust); }
+  .empty { font-family: var(--mono); font-size: 11.5px; letter-spacing: 1.4px; color: var(--faint); padding: 8px 0; }
+
+  footer {
+    display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap;
+    margin-top: 96px; padding-top: 24px; border-top: 1px solid var(--seam);
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.8px; color: var(--dim);
   }
-  button:hover { background: var(--code-bg); }
+  .colophon { margin-top: 28px; font-size: 14.5px; line-height: 1.65; color: var(--quiet); max-width: 78ch; text-wrap: pretty; }
+
+  @media (max-width: 860px) {
+    .wrap { padding: 0 24px; }
+    h1 { font-size: 32px; }
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-2 { grid-template-columns: 1fr; }
+    details.row > summary { grid-template-columns: 1fr auto; }
+    .row-n, .row-caret { display: none; }
+    .row-body { padding-left: 28px; }
+  }
 </style>
 </head>
 <body>
+{% set ns = namespace(section=0) %}
+
+<div class="masthead">
+  <div class="wrap">
+    <div class="lockup">
+      <svg width="26" height="26" viewBox="0 0 64 64" role="img" aria-label="Ossuary">
+        <path d="M14 58 L14 27 A18 18 0 0 1 50 27 L50 58" fill="none" stroke="#E6DFD1" stroke-width="3.2"></path>
+        <rect x="8" y="57.4" width="48" height="4" fill="#E6DFD1"></rect>
+        <circle cx="25" cy="28" r="3.2" fill="#E6DFD1"></circle><circle cx="39" cy="28" r="3.2" fill="#E6DFD1"></circle>
+        <circle cx="25" cy="41" r="3.2" fill="#4E8F7C"></circle><circle cx="39" cy="41" r="3.2" fill="#9C4A3C"></circle>
+      </svg>
+      <div class="wordmark">Ossuary</div>
+    </div>
+    <div class="masthead-meta">
+      <div>RUN {{ manifest.run_id }}</div>
+      <div class="dimmed">POSTMORTEM &middot; {{ report_date }}</div>
+    </div>
+  </div>
+</div>
+
 <div class="wrap">
 
-<header>
-  <h1>Ossuary report</h1>
-  <div class="sub">
-    Run <code>{{ manifest.run_id }}</code> &middot; generated {{ generated_at }}
-    &middot; scanner <code>{{ manifest.scanner_model }}</code>
-    &middot; clusterer <code>{{ manifest.clusterer_model }}</code>
-    {% if not manifest.redaction_enabled %}
-      &middot; <span class="warn">redaction disabled</span>
+  <div class="hero">
+    <div class="kicker">Corpus postmortem</div>
+    <h1>{{ headline }}</h1>
+    <div class="hero-status">
+      <span class="chip chip-{{ verdict.key }}"><i></i>{{ verdict.label }}</span>
+      <span class="data">
+        {{ manifest.session_count | commafy }} SESSIONS EXAMINED &middot;
+        {{ issues | length | commafy }} ISSUES &middot;
+        {{ clusters | length }} CLUSTERS
+      </span>
+    </div>
+  </div>
+
+  <div class="verdict">
+    <div style="background: var({{ {'failed':'--rust','degraded':'--brass','passed':'--verdigris','skipped':'--ash'}[verdict.key] }})"></div>
+    <div class="verdict-body">
+      <div class="label">Dominant failure mode</div>
+      <div class="verdict-lede">{{ lede }}</div>
+      <div class="verdict-detail">{{ detail }}</div>
+    </div>
+  </div>
+
+  <!-- ================= Run summary ================= -->
+  <div class="sec">{% set ns.section = ns.section + 1 %}
+    <div class="sec-n">{{ "%02d" | format(ns.section) }}</div>
+    <h2>Run summary</h2>
+  </div>
+
+  <div class="grid grid-4">
+    <div class="cell">
+      <div class="cell-label">Sessions</div>
+      <div class="cell-value">{{ manifest.session_count | commafy }}</div>
+      <div class="cell-note">
+        {% if manifest.sources %}
+          {% for source, count in manifest.sources.items() %}{{ source }} {{ count }}{% if not loop.last %} &middot; {% endif %}{% endfor %}
+        {% else %}no sources recorded{% endif %}
+      </div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Events</div>
+      <div class="cell-value">{{ manifest.event_count | commafy }}</div>
+      <div class="cell-note">normalized across every adapter</div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Issues</div>
+      <div class="cell-value {% if severity_counts.high %}v-rust{% elif severity_counts.medium %}v-brass{% endif %}">{{ issues | length | commafy }}</div>
+      <div class="cell-note">
+        {{ severity_counts.high }} high &middot; {{ severity_counts.medium }} medium &middot; {{ severity_counts.low }} low
+      </div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Clusters</div>
+      <div class="cell-value">{{ clusters | length }}</div>
+      <div class="cell-note">
+        {{ new_clusters | length }} new this run &middot; {{ orphan_issues | length }} unclustered
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-4 attach">
+    <div class="cell">
+      <div class="cell-label">Affected sessions</div>
+      <div class="cell-value">{{ affected_session_count | commafy }}</div>
+      <div class="cell-note">
+        {%- if manifest.session_count -%}
+          {{ (affected_session_count / manifest.session_count) | pct }} of the corpus carried a finding
+        {%- else -%}nothing to measure{%- endif -%}
+      </div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">From cache</div>
+      <div class="cell-value {% if manifest.cached_session_count %}v-verdigris{% endif %}">{{ manifest.cached_session_count | commafy }}</div>
+      <div class="cell-note">sessions unchanged since the last run</div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Wall clock</div>
+      <div class="cell-value">{{ duration }}</div>
+      <div class="cell-note">
+        {{ manifest.started_at.strftime("%Y-%m-%d %H:%M") }} &rarr;
+        {% if manifest.finished_at %}{{ manifest.finished_at.strftime("%H:%M") }} UTC{% else %}unfinished{% endif %}
+      </div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Redaction</div>
+      <div class="cell-value {% if manifest.redaction_enabled %}v-verdigris{% else %}v-rust{% endif %}">
+        {% if manifest.redaction_enabled %}ON{% else %}OFF{% endif %}
+      </div>
+      <div class="cell-note">
+        {% if manifest.redaction_enabled %}secret-shaped text masked before egress
+        {% else %}<span class="warn">redaction disabled for this run</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-4 attach">
+    <div class="cell">
+      <div class="cell-label">Scanner</div>
+      <div class="cell-value small">{{ manifest.scanner_model or "—" }}</div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Clusterer</div>
+      <div class="cell-value small">{{ manifest.clusterer_model or "—" }}</div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Prompt version</div>
+      <div class="cell-value small">{{ manifest.prompt_version or "—" }}</div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Schema</div>
+      <div class="cell-value small">v{{ manifest.schema_version }}</div>
+    </div>
+  </div>
+
+  {% if failed_scans or capped_scans or manifest.errors %}
+  <div class="note">
+    <div class="label" style="color: var(--brass-fg)">Run caveats</div>
+    <div class="caption">
+      {% if capped_scans %}{{ capped_scans | length }} session(s) hit the turn cap, so their findings are partial.{% endif %}
+      {% if failed_scans %}{{ failed_scans | length }} session(s) errored during scanning and contributed nothing.{% endif %}
+    </div>
+    {% if manifest.errors %}<ul>{% for e in manifest.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ================= Corpus trace ================= -->
+  <div class="sec">{% set ns.section = ns.section + 1 %}
+    <div class="sec-n">{{ "%02d" | format(ns.section) }}</div>
+    <h2>Corpus trace</h2>
+  </div>
+  <div class="prose">
+    One dot per scanned session, in scan order, coloured by the worst thing found in it.
+    {% if trace_has_bars %}The bars below share the rhythm and stand for issue count.{% endif %}
+    Hover a session to read it.
+  </div>
+
+  <div class="plate">
+    {% if trace %}
+    <div class="strip">
+      {% for t in trace %}<div class="dot d-{{ t.key }}" title="{{ t.tip }}"></div>{% endfor %}
+    </div>
+    {% if trace_has_bars %}
+    <div class="bars">
+      {% for t in trace %}<div class="bar d-{{ t.key }}" style="height: {{ t.height }}px" title="{{ t.tip }}"></div>{% endfor %}
+    </div>
+    {% endif %}
+    <div class="strip-foot">
+      <div class="legend">
+        <span><i style="background: var(--rust)"></i>HIGH</span>
+        <span><i style="background: var(--brass)"></i>MEDIUM</span>
+        <span><i style="background: var(--bone)"></i>LOW</span>
+        <span><i style="background: var(--verdigris)"></i>CLEAN</span>
+        <span><i style="background: var(--ash)"></i>ERRORED</span>
+      </div>
+      <div>{{ trace | length }} SESSIONS{% if not trace_has_bars %} &middot; BARS OMITTED ABOVE {{ max_trace_bars }} SESSIONS{% endif %}</div>
+    </div>
+    {% else %}
+    <div class="empty">No sessions were scanned in this run.</div>
     {% endif %}
   </div>
-</header>
 
-<h2>Run summary</h2>
-<div class="cards">
-  <div class="card"><span class="n">{{ manifest.session_count | commafy }}</span><span class="l">Sessions</span></div>
-  <div class="card"><span class="n">{{ manifest.event_count | commafy }}</span><span class="l">Events</span></div>
-  <div class="card"><span class="n">{{ issues | length | commafy }}</span><span class="l">Issues</span></div>
-  <div class="card"><span class="n">{{ clusters | length }}</span><span class="l">Clusters</span></div>
-  <div class="card"><span class="n">{{ new_clusters | length }}</span><span class="l">New this run</span></div>
-  <div class="card"><span class="n">{{ manifest.cached_session_count | commafy }}</span><span class="l">From cache</span></div>
-</div>
+  <!-- ================= New issue types this run ================= -->
+  <div class="sec">{% set ns.section = ns.section + 1 %}
+    <div class="sec-n">{{ "%02d" | format(ns.section) }}</div>
+    <h2>New issue types this run</h2>
+  </div>
+  <div class="prose">Failure modes not present in the stored taxonomy before this run.</div>
 
-<div class="cards">
-  <div class="card"><span class="n sev-high" style="background:none">{{ severity_counts.high }}</span><span class="l">High severity</span></div>
-  <div class="card"><span class="n sev-medium" style="background:none">{{ severity_counts.medium }}</span><span class="l">Medium</span></div>
-  <div class="card"><span class="n sev-low" style="background:none">{{ severity_counts.low }}</span><span class="l">Low</span></div>
-  {% for phase, count in phase_counts.items() %}
-  <div class="card"><span class="n">{{ count }}</span><span class="l">Phase: {{ phase }}</span></div>
-  {% endfor %}
-</div>
-
-{% if manifest.sources %}
-<p class="sub">Sources scanned:
-  {% for source, count in manifest.sources.items() %}<code>{{ source }}</code> ({{ count }}){% if not loop.last %}, {% endif %}{% endfor %}
-</p>
-{% endif %}
-
-{% if failed_scans or capped_scans or manifest.errors %}
-<div class="note">
-  <strong>Run caveats.</strong>
-  {% if capped_scans %}{{ capped_scans | length }} session(s) hit the turn cap, so their findings are partial.{% endif %}
-  {% if failed_scans %}{{ failed_scans | length }} session(s) errored during scanning.{% endif %}
-  {% if manifest.errors %}<ul>{% for e in manifest.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-</div>
-{% endif %}
-
-<h2>New issue types this run</h2>
-{% if new_clusters %}
-  <p class="sub">Failure modes not present in the stored taxonomy before this run.</p>
-  {% for entry in new_clusters %}
-  <details class="cluster" open>
-    <summary>
-      <span class="cluster-name">{{ entry.cluster.name }}</span>
-      <span class="tag tag-new">new</span>
-      <span class="cluster-count">{{ entry.session_count }} session(s) &middot; {{ entry.issue_count }} issue(s)</span>
-    </summary>
-    <div class="cluster-body">
-      <p>{{ entry.cluster.summary }}</p>
-    </div>
-  </details>
-  {% endfor %}
-{% else %}
-  <p class="empty">
-    {% if manifest.clusters %}No new failure modes this run &mdash; every cluster matched the stored taxonomy.
-    {% else %}No clusters were produced for this run.{% endif %}
-  </p>
-{% endif %}
-
-<h2>Clusters</h2>
-<p class="sub">Ordered by number of affected sessions.</p>
-{% if clusters %}
-<div class="controls">
-  <button onclick="document.querySelectorAll('details.cluster').forEach(d=>d.open=true)">Expand all</button>
-  <button onclick="document.querySelectorAll('details.cluster').forEach(d=>d.open=false)">Collapse all</button>
-</div>
-{% for entry in clusters %}
-<details class="cluster">
-  <summary>
-    <span class="cluster-name">{{ entry.cluster.name }}</span>
-    {% if entry.cluster.is_new_this_run %}<span class="tag tag-new">new</span>{% endif %}
-    {% for phase in entry.phases %}<span class="tag tag-phase">{{ phase }}</span>{% endfor %}
-    <span class="cluster-count">{{ entry.session_count }} session(s) &middot; {{ entry.issue_count }} issue(s)</span>
-  </summary>
-  <div class="cluster-body">
-    <p>{{ entry.cluster.summary }}</p>
-    <div class="meta">
-      cluster id <code>{{ entry.cluster.cluster_id }}</code>
-      &middot; first seen in run <code>{{ entry.cluster.first_seen_run }}</code>
-    </div>
-
-    {% if entry.example_sessions %}
-    <div class="ev-head">Example sessions</div>
-    <div class="meta">
-      {% for sid in entry.example_sessions %}<code>{{ sid }}</code>{% if not loop.last %} &middot; {% endif %}{% endfor %}
-      {% if entry.cluster.affected_sessions | length > entry.example_sessions | length %}
-        &middot; +{{ entry.cluster.affected_sessions | length - entry.example_sessions | length }} more
-      {% endif %}
-    </div>
-    {% endif %}
-
-    {% for issue in entry.members %}
-    <div class="issue sev-{{ issue.severity }}-b">
-      <h3>{{ issue.title }} <span class="tag sev-{{ issue.severity }}">{{ issue.severity }}</span></h3>
-      <div>{{ issue.description }}</div>
-      <div class="meta">
-        session <code>{{ issue.session_id }}</code>
-        &middot; source {{ issue.source }}
-        &middot; phase {{ issue.phase }}
-        &middot; confidence {{ "%.2f"|format(issue.confidence) }}
-        {% if issue.evidence_event_indices %}
-        &middot; events {{ issue.evidence_event_indices | join(", ") }}
-        {% endif %}
-      </div>
-      {% set excerpts = evidence.get(issue.issue_id) %}
-      {% if excerpts %}
-        {% for ex in excerpts %}
-        <div class="ev-head">
-          event {{ ex.index }} &mdash; {{ ex.role }}/{{ ex.kind }}{% if ex.tool_name %} &middot; {{ ex.tool_name }}{% endif %}
-          {% if ex.shape %}
-            &middot; {{ ex.shape.byte_length }} bytes
-            {% if ex.shape.duration_ms is not none %}&middot; {{ ex.shape.duration_ms }}ms{% endif %}
-            {% if ex.shape.exit_code is not none %}&middot; exit {{ ex.shape.exit_code }}{% endif %}
-            {% if not ex.shape.terminates_cleanly %}&middot; <span class="warn">does not terminate cleanly</span>{% endif %}
-            {% if ex.shape.is_round_number %}&middot; <span class="warn">round byte count</span>{% endif %}
-          {% endif %}
-        </div>
-        <pre>{{ ex.text }}</pre>
-        {% endfor %}
-      {% endif %}
+  {% if new_clusters %}
+  <div class="grid" style="grid-template-columns: repeat({{ [new_clusters | length, 3] | min }}, 1fr)">
+    {% for entry in new_clusters %}
+    <div class="cell" style="padding: 32px 30px 36px; gap: 16px">
+      <div class="label">{{ entry.session_count }} session(s) &middot; {{ entry.issue_count }} issue(s)</div>
+      <div style="font-size: 19px; line-height: 1.42; color: var(--bone); text-wrap: pretty">{{ entry.cluster.name }}</div>
+      <div style="font-size: 15.5px; line-height: 1.62; color: var(--dust); text-wrap: pretty">{{ entry.cluster.summary }}</div>
+      <div class="row-locus" style="margin-top: auto; padding-top: 14px">FIRST SEEN {{ entry.cluster.first_seen_run }}</div>
     </div>
     {% endfor %}
   </div>
-</details>
-{% endfor %}
-{% else %}
-<p class="empty">No clusters. {% if issues %}Issues were found but not clustered &mdash; see below.{% else %}No issues were found in this corpus.{% endif %}</p>
-{% endif %}
-
-{% if orphan_issues %}
-<h2>Unclustered issues</h2>
-<p class="sub">
-  Found by the session scanner but not claimed by any cluster. Listed so nothing
-  discovered is silently lost between stages.
-</p>
-{% for issue in orphan_issues %}
-<div class="issue sev-{{ issue.severity }}-b">
-  <h3>{{ issue.title }} <span class="tag sev-{{ issue.severity }}">{{ issue.severity }}</span></h3>
-  <div>{{ issue.description }}</div>
-  <div class="meta">
-    session <code>{{ issue.session_id }}</code> &middot; phase {{ issue.phase }}
-    &middot; confidence {{ "%.2f"|format(issue.confidence) }}
-    {% if issue.evidence_event_indices %}&middot; events {{ issue.evidence_event_indices | join(", ") }}{% endif %}
-  </div>
-</div>
-{% endfor %}
-{% endif %}
-
-<h2>Tool statistics</h2>
-<p class="sub">
-  Measured across every scanned session. These are the corpus-wide patterns no
-  single-session view can show.
-</p>
-{% if tool_stats %}
-<div class="table-scroll">
-<table>
-  <thead>
-    <tr>
-      <th>Tool</th>
-      <th class="num">Calls</th>
-      <th class="num">Sessions</th>
-      <th class="num">Errors</th>
-      <th class="num">Empty</th>
-      <th class="num">Round</th>
-      <th class="num">Unclean</th>
-      <th class="num">Dupes</th>
-      <th class="num">p50 B</th>
-      <th class="num">p95 B</th>
-      <th class="num">max B</th>
-      <th class="num">p50 ms</th>
-      <th class="num">p95 ms</th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for stat in tool_stats %}
-    <tr>
-      <td><code>{{ stat.tool_name }}</code></td>
-      <td class="num">{{ stat.call_count | commafy }}</td>
-      <td class="num">{{ stat.session_count | commafy }}</td>
-      <td class="num {% if stat.error_rate > 0.1 %}warn{% endif %}">
-        {{ stat.error_count }}{% if stat.call_count %} ({{ stat.error_rate | pct }}){% endif %}
-      </td>
-      <td class="num">{{ stat.empty_count }}</td>
-      <td class="num {% if stat.round_number_count > 0 %}warn{% endif %}">{{ stat.round_number_count }}</td>
-      <td class="num">{{ stat.truncated_looking_count }}</td>
-      <td class="num {% if stat.duplicate_rate > 0.2 %}warn{% endif %}">
-        {{ stat.duplicate_result_count }}{% if stat.call_count %} ({{ stat.duplicate_rate | pct }}){% endif %}
-      </td>
-      <td class="num">{{ stat.byte_length_p50 | commafy }}</td>
-      <td class="num">{{ stat.byte_length_p95 | commafy }}</td>
-      <td class="num">{{ stat.byte_length_max | commafy }}</td>
-      <td class="num">{{ stat.duration_ms_p50 if stat.duration_ms_p50 is not none else "—" }}</td>
-      <td class="num">{{ stat.duration_ms_p95 if stat.duration_ms_p95 is not none else "—" }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-<p class="sub" style="margin-top:.75rem">
-  <strong>Round</strong> counts results whose byte length is an exact cap-shaped
-  number. <strong>Unclean</strong> counts results that do not end at a plausible
-  boundary. <strong>Dupes</strong> counts byte-identical repeated results. All
-  three are measurements, not verdicts.
-</p>
-{% else %}
-<p class="empty">No tool results in this corpus.</p>
-{% endif %}
-
-<h2>Sessions scanned</h2>
-<div class="table-scroll">
-<table>
-  <thead>
-    <tr><th>Session</th><th>Source</th><th class="num">Issues</th><th class="num">Turns</th><th>Status</th><th>Path</th></tr>
-  </thead>
-  <tbody>
-  {% for scan in manifest.scans %}
-    <tr>
-      <td><code>{{ scan.session_id }}</code></td>
-      <td>{{ scan.source }}</td>
-      <td class="num">{{ scan.issues | length }}</td>
-      <td class="num">{{ scan.turns_used }}</td>
-      <td>
-        {%- if scan.error %}<span class="warn">error</span>
-        {%- elif scan.hit_turn_cap %}<span class="warn">turn cap</span>
-        {%- elif scan.from_cache %}cached
-        {%- else %}ok{% endif -%}
-      </td>
-      <td><code>{{ scan.path }}</code></td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-
-<p class="sub" style="margin-top:2.5rem; padding-top:1rem; border-top:1px solid var(--line)">
-  Excerpts are verbatim from the transcripts. Where this report shortened one it
-  says so inline with an <code>[[ossuary:elided N of M bytes]]</code> marker; an
-  excerpt without that marker ends exactly as it does on disk.
-  {% if manifest.redaction_enabled %}
-  Secret-shaped text was masked before any content left the machine.
   {% else %}
-  <span class="warn">Redaction was disabled for this run.</span>
+  <div class="plate">
+    <div class="empty">
+      {% if manifest.clusters %}No new failure modes this run &mdash; every cluster matched the stored taxonomy.
+      {% else %}No clusters were produced for this run.{% endif %}
+    </div>
+  </div>
   {% endif %}
-</p>
+
+  <!-- ================= Clusters ================= -->
+  <div class="sec sec-bar">
+    <div style="display: flex; align-items: baseline; gap: 18px">{% set ns.section = ns.section + 1 %}
+      <div class="sec-n">{{ "%02d" | format(ns.section) }}</div>
+      <h2>Clusters</h2>
+    </div>
+    {% if clusters %}
+    <div id="sev-filter" style="display: flex; gap: 12px; flex-wrap: wrap">
+      <div class="switches">
+        <button type="button" data-sev="all" aria-pressed="true">All {{ clusters | length }}</button>
+        <button type="button" data-sev="high" aria-pressed="false">High</button>
+        <button type="button" data-sev="medium" aria-pressed="false">Medium</button>
+        <button type="button" data-sev="low" aria-pressed="false">Low</button>
+      </div>
+      <div class="switches">
+        <button type="button" id="expand-all">Expand all</button>
+        <button type="button" id="collapse-all">Collapse all</button>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  <div class="prose">Ordered by number of affected sessions. Severity is the worst issue in the cluster.</div>
+
+  {% if clusters %}
+  <div class="rows" id="cluster-rows">
+    {% for entry in clusters %}
+    <details class="row" data-sev="{{ entry.severity_key }}">
+      <summary>
+        <div class="row-n">C-{{ "%02d" | format(loop.index) }}</div>
+        <div class="row-main">
+          <div class="row-title">{{ entry.cluster.name }}</div>
+          <div class="row-locus">
+            {{ entry.session_count }} SESSION(S) &middot; {{ entry.issue_count }} ISSUE(S)
+            {%- if entry.phases %} &middot; {{ entry.phases | join(", ") | upper }}{% endif %}
+            {%- if entry.cluster.is_new_this_run %} &middot; NEW{% endif %}
+          </div>
+        </div>
+        <div class="chip chip-{{ entry.severity_key }} chip-sm"><i></i>{{ entry.severity_key }}</div>
+        <div class="row-caret"></div>
+      </summary>
+      <div class="row-body">
+        <div class="prose">{{ entry.cluster.summary }}</div>
+        <div class="provenance">
+          <div>CLUSTER <span style="color: var(--body-fg)">{{ entry.cluster.cluster_id }}</span></div>
+          <div>FIRST SEEN IN RUN <span style="color: var(--body-fg)">{{ entry.cluster.first_seen_run or "—" }}</span></div>
+        </div>
+
+        {% if entry.example_sessions %}
+        <div>
+          <div class="evidence-head">Example sessions</div>
+          <div class="provenance" style="margin-top: 8px">
+            <div>
+              {% for sid in entry.example_sessions %}<code>{{ sid }}</code>{% if not loop.last %} &middot; {% endif %}{% endfor %}
+              {%- if entry.cluster.affected_sessions | length > entry.example_sessions | length %}
+                &middot; +{{ entry.cluster.affected_sessions | length - entry.example_sessions | length }} more
+              {%- endif %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% for issue in entry.members %}
+        <div class="finding">
+          <div class="finding-head">
+            <h3>{{ issue.title }}</h3>
+            <span class="chip chip-{{ issue.severity }} chip-sm"><i></i>{{ issue.severity }}</span>
+          </div>
+          <div class="finding-body">{{ issue.description }}</div>
+          <div class="provenance">
+            <div>SESSION <span style="color: var(--body-fg)">{{ issue.session_id }}</span></div>
+            <div>{{ issue.source | upper }} &middot; {{ issue.phase | upper }}</div>
+            <div>CONFIDENCE <span style="color: var(--body-fg)">{{ "%.2f" | format(issue.confidence) }}</span></div>
+            {% if issue.evidence_event_indices %}
+            <div>EVENTS <span style="color: var(--body-fg)">{{ issue.evidence_event_indices | join(", ") }}</span></div>
+            {% endif %}
+          </div>
+          {% set excerpts = evidence.get(issue.issue_id) %}
+          {% if excerpts %}
+            {% for ex in excerpts %}
+            <div class="evidence-head">
+              EVENT {{ ex.index }} &middot; {{ ex.role }}/{{ ex.kind }}{% if ex.tool_name %} &middot; {{ ex.tool_name }}{% endif %}
+              {%- if ex.shape %}
+                &middot; {{ ex.shape.byte_length | commafy }} BYTES
+                {%- if ex.shape.duration_ms is not none %} &middot; {{ ex.shape.duration_ms }}MS{% endif %}
+                {%- if ex.shape.exit_code is not none %} &middot; EXIT {{ ex.shape.exit_code }}{% endif %}
+                {%- if not ex.shape.terminates_cleanly %} &middot; <span class="warn">DOES NOT TERMINATE CLEANLY</span>{% endif %}
+                {%- if ex.shape.is_round_number %} &middot; <span class="warn">ROUND BYTE COUNT</span>{% endif %}
+              {%- endif %}
+            </div>
+            <pre>{{ ex.text }}</pre>
+            {% endfor %}
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="plate">
+    <div class="empty">
+      No clusters. {% if issues %}Issues were found but not clustered &mdash; see below.
+      {% else %}No issues were found in this corpus.{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if orphan_issues %}
+  <!-- ================= Unclustered issues ================= -->
+  <div class="sec">{% set ns.section = ns.section + 1 %}
+    <div class="sec-n">{{ "%02d" | format(ns.section) }}</div>
+    <h2>Unclustered issues</h2>
+  </div>
+  <div class="prose">
+    Found by the session scanner but not claimed by any cluster. Listed so nothing
+    discovered is silently lost between stages.
+  </div>
+
+  <div class="rows">
+    {% for issue in orphan_issues %}
+    <details class="row">
+      <summary>
+        <div class="row-n">U-{{ "%02d" | format(loop.index) }}</div>
+        <div class="row-main">
+          <div class="row-title">{{ issue.title }}</div>
+          <div class="row-locus">
+            {{ issue.session_id }} &middot; {{ issue.phase | upper }} &middot; CONFIDENCE {{ "%.2f" | format(issue.confidence) }}
+          </div>
+        </div>
+        <div class="chip chip-{{ issue.severity }} chip-sm"><i></i>{{ issue.severity }}</div>
+        <div class="row-caret"></div>
+      </summary>
+      <div class="row-body">
+        <div class="prose">{{ issue.description }}</div>
+        {% if issue.evidence_event_indices %}
+        <div class="provenance"><div>EVENTS <span style="color: var(--body-fg)">{{ issue.evidence_event_indices | join(", ") }}</span></div></div>
+        {% endif %}
+        {% set excerpts = evidence.get(issue.issue_id) %}
+        {% if excerpts %}
+          {% for ex in excerpts %}
+          <div class="evidence-head">EVENT {{ ex.index }} &middot; {{ ex.role }}/{{ ex.kind }}{% if ex.tool_name %} &middot; {{ ex.tool_name }}{% endif %}</div>
+          <pre>{{ ex.text }}</pre>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ================= Where the findings fall ================= -->
+  <div class="sec">{% set ns.section = ns.section + 1 %}
+    <div class="sec-n">{{ "%02d" | format(ns.section) }}</div>
+    <h2>Where the findings fall</h2>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="label">Issues by phase</div>
+      {% if phase_bars %}
+      <div class="meters">
+        {% for row in phase_bars %}
+        <div class="meter">
+          <div class="meter-head">
+            <div>{{ row.phase | upper }} &middot; {{ row.count }} ISSUE(S)</div>
+            <b>{{ row.pct }}</b>
+          </div>
+          <div class="meter-track"><div class="meter-fill f-{{ row.key }}" style="width: {{ row.pct }}"></div></div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="caption">
+        Phase is the scanner's attribution of where the failure originated, not where it surfaced.
+        Each bar takes the colour of the worst issue filed against that phase.
+      </div>
+      {% else %}
+      <div class="empty">No issues to distribute.</div>
+      {% endif %}
+    </div>
+
+    <div class="panel">
+      <div class="label">Tool calls</div>
+      {% if tool_rows %}
+      <div class="toolrows">
+        {% for row in tool_rows %}
+        <div class="toolrow">
+          <div class="toolrow-name">{{ row.stat.tool_name }}</div>
+          <div class="toolrow-right">
+            <div class="toolrow-dots">
+              {% for d in row.dots %}<i class="d-{{ d }}"></i>{% endfor %}
+            </div>
+            <div class="toolrow-count">{% if row.proportional %}<span class="approx">~</span>{% endif %}{{ row.stat.call_count | commafy }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="caption">
+        Rust marks a result carrying an error, verdigris the rest. One dot is one call;
+        rows marked <span class="approx">~</span> exceed {{ max_tool_dots }} calls and are redrawn proportionally.
+        {% if manifest.tool_stats | length > tool_rows_shown %}
+        Showing the {{ tool_rows_shown }} busiest of {{ manifest.tool_stats | length }} tools &mdash; the table below has all of them.
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="empty">No tool results in this corpus.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ================= Tool statistics ================= -->
+  <div class="sec">{% set ns.section = ns.section + 1 %}
+    <div class="sec-n">{{ "%02d" | format(ns.section) }}</div>
+    <h2>Tool statistics</h2>
+  </div>
+  <div class="prose">
+    Measured across every scanned session. These are the corpus-wide patterns no
+    single-session view can show.
+  </div>
+
+  {% if tool_stats %}
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Tool</th>
+          <th class="num">Calls</th>
+          <th class="num">Sessions</th>
+          <th class="num">Errors</th>
+          <th class="num">Empty</th>
+          <th class="num">Round</th>
+          <th class="num">Unclean</th>
+          <th class="num">Dupes</th>
+          <th class="num">p50 B</th>
+          <th class="num">p95 B</th>
+          <th class="num">max B</th>
+          <th class="num">p50 ms</th>
+          <th class="num">p95 ms</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for stat in tool_stats %}
+        <tr>
+          <td style="color: var(--bone)">{{ stat.tool_name }}</td>
+          <td class="num">{{ stat.call_count | commafy }}</td>
+          <td class="num">{{ stat.session_count | commafy }}</td>
+          <td class="num {% if stat.error_rate > 0.1 %}bad{% endif %}">
+            {{ stat.error_count }}{% if stat.call_count %} ({{ stat.error_rate | pct }}){% endif %}
+          </td>
+          <td class="num">{{ stat.empty_count }}</td>
+          <td class="num {% if stat.round_number_count > 0 %}warn{% endif %}">{{ stat.round_number_count }}</td>
+          <td class="num">{{ stat.truncated_looking_count }}</td>
+          <td class="num {% if stat.duplicate_rate > 0.2 %}warn{% endif %}">
+            {{ stat.duplicate_result_count }}{% if stat.call_count %} ({{ stat.duplicate_rate | pct }}){% endif %}
+          </td>
+          <td class="num">{{ stat.byte_length_p50 | commafy }}</td>
+          <td class="num">{{ stat.byte_length_p95 | commafy }}</td>
+          <td class="num">{{ stat.byte_length_max | commafy }}</td>
+          <td class="num">{% if stat.duration_ms_p50 is not none %}{{ stat.duration_ms_p50 }}{% else %}<span class="inert">&mdash;</span>{% endif %}</td>
+          <td class="num">{% if stat.duration_ms_p95 is not none %}{{ stat.duration_ms_p95 }}{% else %}<span class="inert">&mdash;</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="caption" style="margin-top: 14px; max-width: 78ch">
+    <b style="color: var(--body-fg); font-weight: 400">Round</b> counts results whose byte length is an exact
+    cap-shaped number. <b style="color: var(--body-fg); font-weight: 400">Unclean</b> counts results that do not
+    end at a plausible boundary. <b style="color: var(--body-fg); font-weight: 400">Dupes</b> counts byte-identical
+    repeated results. All three are measurements, not verdicts.
+  </div>
+  {% else %}
+  <div class="plate"><div class="empty">No tool results in this corpus.</div></div>
+  {% endif %}
+
+  <!-- ================= Sessions scanned ================= -->
+  <div class="sec">{% set ns.section = ns.section + 1 %}
+    <div class="sec-n">{{ "%02d" | format(ns.section) }}</div>
+    <h2>Sessions scanned</h2>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Session</th><th>Source</th><th class="num">Issues</th><th class="num">Turns</th><th>Status</th><th>Path</th></tr>
+      </thead>
+      <tbody>
+      {% for scan in manifest.scans %}
+        <tr>
+          <td style="color: var(--bone)">{{ scan.session_id }}</td>
+          <td>{{ scan.source }}</td>
+          <td class="num">{{ scan.issues | length }}</td>
+          <td class="num">{{ scan.turns_used }}</td>
+          <td>
+            {%- if scan.error %}<span class="bad">error</span>
+            {%- elif scan.hit_turn_cap %}<span class="warn">turn cap</span>
+            {%- elif scan.from_cache %}<span class="inert">cached</span>
+            {%- else %}ok{% endif -%}
+          </td>
+          <td class="inert">{{ scan.path }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="colophon">
+    Excerpts are verbatim from the transcripts. Where this report shortened one it
+    says so inline with an <code>[[ossuary:elided N of M bytes]]</code> marker; an
+    excerpt without that marker ends exactly as it does on disk.
+    {% if manifest.redaction_enabled %}
+    Secret-shaped text was masked before any content left the machine.
+    {% else %}
+    <span class="warn">Redaction was disabled for this run, so excerpts may contain live credentials.</span>
+    {% endif %}
+  </div>
+
+  <footer>
+    <div>OSSUARY &middot; RUN {{ manifest.run_id }}</div>
+    <div>INTERRED {{ generated_at }} &middot; {{ manifest.session_count | commafy }} SESSIONS EXAMINED</div>
+  </footer>
 
 </div>
+
+<script>
+  (function () {
+    var filter = document.getElementById("sev-filter");
+    if (!filter) return;
+    var rows = Array.prototype.slice.call(
+      document.querySelectorAll("#cluster-rows > details.row")
+    );
+
+    filter.addEventListener("click", function (event) {
+      var button = event.target.closest("button");
+      if (!button) return;
+
+      if (button.id === "expand-all" || button.id === "collapse-all") {
+        var open = button.id === "expand-all";
+        rows.forEach(function (row) {
+          if (row.style.display !== "none") row.open = open;
+        });
+        return;
+      }
+
+      var wanted = button.getAttribute("data-sev");
+      if (!wanted) return;
+      filter.querySelectorAll("button[data-sev]").forEach(function (other) {
+        other.setAttribute("aria-pressed", String(other === button));
+      });
+      rows.forEach(function (row) {
+        var match = wanted === "all" || row.getAttribute("data-sev") === wanted;
+        row.style.display = match ? "" : "none";
+      });
+    });
+  })();
+</script>
 </body>
 </html>

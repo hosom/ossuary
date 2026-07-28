@@ -1,7 +1,22 @@
-# Ossuary
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ossuary-mark.svg">
+  <img src="docs/brand/ossuary-mark-inverse.svg" alt="Ossuary" width="120">
+</picture>
+
+# OSSUARY
+
+**Where the remains are sorted**
+
+</div>
 
 Reads local LLM agent session transcripts, finds health issues in them, clusters
 those issues across the corpus, and writes a self-contained HTML report.
+
+A postmortem tool reads what is left behind. Ossuary takes a finished agent
+session — every turn, tool call, retry and dead end — and lays the remains out in
+order, so the engineer who owns the agent can see exactly where it went wrong.
 
 Built for hundreds to low thousands of sessions on a laptop.
 
@@ -145,6 +160,48 @@ Named clusters persist to `.ossuary/taxonomy.json`. Later runs assign to existin
 clusters where they fit and only propose genuinely new ones — which stops reports
 reshuffling between runs and makes "new issue types this run" a real signal
 rather than an artifact of the model choosing different words.
+
+## The report
+
+`ossuary report` renders one self-contained HTML file — inline CSS and JS, no
+CDN links, no network — so it survives being attached to a ticket. Sections:
+run summary, corpus trace, new issue types this run, clusters (severity-filtered,
+expandable to member issues and verbatim evidence), distribution by phase and
+tool, full tool statistics, and every session scanned.
+
+### Brand
+
+The mark is a niche — the arched recess a set of remains is filed into — holding
+three strips of sorted bone. The strips carry the meaning: cream for the record,
+verdigris for what held, rust for what failed. The arch springs from a circle of
+radius 18 centred at (32,27) on a 64-unit grid, drawn in a single 2.4-unit
+stroke, and reads down to 16px. Clear space equals the plinth height on all four
+sides.
+
+| Colour | Hex | Used for |
+|---|---|---|
+| Void | `#12100E` | Every canvas. Never used for type. |
+| Bone | `#E6DFD1` | Primary type, the mark, rules of consequence |
+| Verdigris | `#4E8F7C` | Passed, held, resolved. Section numerals. |
+| Rust | `#9C4A3C` | Failure, severity. Used sparingly. |
+| Ash | `#5A554D` | Secondary type, skipped sessions, inert data |
+| Brass | `#C8A24A` | Warnings — measurements that want a second look |
+
+Cinzel for display (inscriptional caps only, never a paragraph), Spectral for
+body, JetBrains Mono for every measurement, label, ID and code fragment. The
+report requests all three and falls back down stacks that keep their character,
+because a file that must work offline cannot fetch a webfont.
+
+The recurring device is the dot strip: a run of circles where each dot is one
+session, one tool call, one attempt. It is the interior of the mark and it is the
+corpus trace in the report. Where a strip stops being one dot per unit it says so
+rather than quietly standing for the wrong number — the same rule as
+`[[ossuary:elided]]`, applied to pixels.
+
+Findings are stated flatly, past tense, with the number attached. The funerary
+register lives in the naming and the surfaces, never in the diagnosis: the
+engineer reading this is debugging at 6pm and wants the cause of death and the
+line number, not a metaphor.
 
 ## Tests
 

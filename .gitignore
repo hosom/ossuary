@@ -13,3 +13,6 @@ issues.jsonl
 
 .pytest_cache/
 .ruff_cache/
+
+# Local secrets
+.env
