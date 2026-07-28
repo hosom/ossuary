@@ -22,6 +22,37 @@ Two consequences worth stating plainly:
 - **You can watch it happen.** The investigation is a normal conversation with
   your agent. You can read its reasoning, redirect it mid-run, and stop it.
 
+## One session per context window
+
+The batch pipeline this replaced ran one agent per session — a fresh context
+window per transcript, enforced by a `for` loop. That isolation was not
+incidental. Outlines are large, and two of them in one context means the second
+session is read by an agent already holding opinions about the first: you start
+pattern-matching session twelve against what went wrong in session seven.
+Findings stop being independent, and once the window fills, recall degrades with
+nothing to tell you it did. It is the same failure the tool avoids by refusing to
+hand the investigator a taxonomy of known problems.
+
+A prompt-driven design has to earn that property rather than inherit it, so it
+is arranged in three places:
+
+- The **`investigate` skill** is the coordinator. For a single session it works
+  inline; for more than one it spawns a `session-investigator` per session, in
+  one message so they run concurrently.
+- The **`session-investigator`** is granted `outline`, `read_events`,
+  `search_session`, `read_event_slice`, `tool_stats` and `report_issue` — and
+  nothing else. With no `ossuary_sources` it cannot widen its own scope to a
+  second transcript, and with no `ossuary_write_run` it cannot publish everyone
+  else's partial findings by finishing early.
+- **`tests/test_plugins.py`** asserts those grants, so widening one fails the
+  suite rather than quietly costing recall six months from now.
+
+The MCP server is one process per host session, shared by every subagent, so
+findings from all of them accumulate in a single buffer. The coordinator then
+does the corpus-level pass the per-session investigators structurally cannot —
+`ossuary_known_clusters`, `ossuary_propose_cluster`, `ossuary_write_run` — which
+is the same split the old two-agent pipeline had, for the same reason.
+
 ## Claude Code
 
 ```
@@ -40,7 +71,7 @@ claude --plugin-dir ./plugins/claude-code/ossuary
 | `.mcp.json` | Starts `ossuary-mcp` via `uvx --from ossuary` |
 | `skills/investigate` | Model-invoked. The method: read the outline in full, follow the shapes, check corpus stats before calling a tool abnormal |
 | `/ossuary:report` | Renders HTML from recorded findings; no inference |
-| `agents/session-investigator` | A subagent with only the Ossuary read tools, so auditing several sessions gives each one its own context window |
+| `agents/session-investigator` | Read tools plus `report_issue`, nothing else — one spawned per session, so each transcript gets its own context window |
 
 ## Copilot CLI
 
