@@ -128,10 +128,39 @@ def _server_class() -> Any:
         ) from exc
 
 
+def _stamp_version(server: Any) -> None:
+    """Advertise the installed version in the MCP handshake.
+
+    Left unset, `serverInfo.version` is the empty string, and a host talking to
+    a stale build looks exactly like a host talking to a current one. That cost
+    an investigation twelve shell calls to work out by hand, so the one field
+    that would have answered it in seconds is now filled in.
+
+    The attribute lives on the low-level server in mcp 1.x and on the ergonomic
+    one in 2.x, and neither accepts it as a constructor argument. Setting it is
+    best-effort: a version string is a diagnostic, and failing to attach one is
+    never worth refusing to start over.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        installed = version("ossuary")
+    except PackageNotFoundError:  # running from a source tree, never installed
+        return
+    for target in (getattr(server, "_mcp_server", None), server):
+        if target is not None and hasattr(target, "version"):
+            try:
+                target.version = installed
+            except Exception:  # a read-only property on some future major
+                continue
+            return
+
+
 def build_server(roots: list[Path] | None = None, *, redact: bool = True) -> Any:
     """Construct the MCP server. Importing this module must not need `mcp`."""
     state = _State(roots, redact=redact)
     mcp = _server_class()(SERVER_NAME)
+    _stamp_version(mcp)
 
     @mcp.tool()
     def ossuary_sources() -> str:

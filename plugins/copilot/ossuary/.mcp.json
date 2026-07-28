@@ -2,9 +2,10 @@
   "mcpServers": {
     "ossuary": {
       "type": "local",
-      "command": "uvx",
+      "command": "uv",
       "args": [
-        "--from",
+        "run",
+        "--project",
         "${CLAUDE_PLUGIN_ROOT}/../../..",
         "ossuary-mcp"
       ],

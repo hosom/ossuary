@@ -102,15 +102,15 @@ class TestManifests:
         "path", [CLAUDE / ".mcp.json", COPILOT / ".mcp.json"], ids=["claude", "copilot"]
     )
     def test_mcp_manifest_source_resolves_to_this_package(self, path: Path):
-        """The `--from` argument has to name something that is actually this project.
+        """The project argument has to name something that is actually this project.
 
         This has now been got wrong twice, in two different ways, and both times
         the only symptom was a plugin whose tools never appeared:
 
-          * `--from ossuary` installed an unrelated PyPI project -- the name is
-            taken by a dice analysis toolkit.
-          * `--from git+.../hosom/ossuary` pointed at the default branch, which
-            did not yet contain the package at all.
+          * `ossuary` installed an unrelated PyPI project -- the name is taken
+            by a dice analysis toolkit.
+          * `git+.../hosom/ossuary` pointed at the default branch, which did not
+            yet contain the package at all.
 
         So this does not check the spelling, it resolves the thing. The plugin
         ships inside the repository that provides the package, so substituting
@@ -119,7 +119,7 @@ class TestManifests:
         """
         server = json.loads(path.read_text(encoding="utf-8"))["mcpServers"]["ossuary"]
         args = server["args"]
-        source = args[args.index("--from") + 1]
+        source = args[args.index("--project") + 1]
 
         assert source != "ossuary", (
             "a bare distribution name resolves to an unrelated PyPI project"
@@ -139,6 +139,38 @@ class TestManifests:
         assert f"{entry_point} =" in text, (
             f"{resolved} declares no {entry_point!r} script for the manifest to run"
         )
+
+    @pytest.mark.parametrize(
+        "path", [CLAUDE / ".mcp.json", COPILOT / ".mcp.json"], ids=["claude", "copilot"]
+    )
+    def test_mcp_manifest_runs_the_checkout_rather_than_a_built_copy(self, path: Path):
+        """`uv run --project`, never `uvx --from`, and the difference is not style.
+
+        `uvx --from <path>` builds the project into a cached environment keyed on
+        the path and version. Neither `--refresh` nor `--reinstall` invalidates
+        that cache when the source changes underneath it, so an edit to
+        `src/ossuary/` is silently ignored and the host keeps talking to whatever
+        was built first. A whole investigation was lost to this: the server ran
+        code that had been fixed in the working tree hours earlier, and the only
+        way out was deleting uv's environment cache by hand.
+
+        `uv run --project` executes the checkout itself, so there is no build to
+        go stale. It also resolves against `uv.lock` instead of re-resolving from
+        scratch, which is the second half of the same bug -- `mcp>=1.2` is
+        unbounded, and a fresh resolve pulled an SDK major the code of the day
+        could not import, while the lockfile pins a version that works.
+        """
+        server = json.loads(path.read_text(encoding="utf-8"))["mcpServers"]["ossuary"]
+        assert server["command"] == "uv", (
+            f"expected the `uv` launcher, got {server['command']!r}: `uvx` builds "
+            "into a cache that does not notice source edits"
+        )
+        args = server["args"]
+        assert args[0] == "run" and "--project" in args, (
+            "run the checkout with `uv run --project`; `uvx --from` serves a "
+            "cached build and ignores uv.lock"
+        )
+        assert "--from" not in args, "`--from` is the uvx spelling that caches"
 
     def test_marketplace_points_at_a_real_plugin(self):
         entry = json.loads(MARKETPLACE.read_text(encoding="utf-8"))["plugins"][0]

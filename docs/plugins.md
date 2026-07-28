@@ -139,13 +139,38 @@ package, so `../../..` from there is the project itself — whether you loaded i
 with `--plugin-dir` from a working copy or installed it from the marketplace,
 which clones the same repository.
 
-The two alternatives were tried and both shipped broken. A bare `--from ossuary`
+The two alternatives were tried and both shipped broken. A bare `ossuary`
 installs an unrelated PyPI project of that name (a dice analysis toolkit), and a
 `git+` URL to the default branch installs whatever that branch happens to
 contain, which is not necessarily this package. In both cases the only symptom
 is a plugin whose tools never appear, and a JSON-RPC error with no detail.
 `tests/test_plugins.py` now resolves the source and checks it lands on a
 pyproject declaring the entry point the manifest goes on to run.
+
+### Why `uv run --project` and not `uvx --from`
+
+`uvx --from <path>` builds the project into a cached environment keyed on the
+path and the version. When the source changes underneath it, that cache is not
+invalidated — not by `--refresh`, and not by `--reinstall`. Editing
+`src/ossuary/` and restarting the host gets you the old code, silently, with a
+handshake that looks entirely healthy. This is not hypothetical: an
+investigation was lost to it, the server answering with a build from hours
+earlier, and the only way out was deleting `~/.cache/uv/environments-v2` by
+hand.
+
+`uv run --project` runs the checkout itself. There is no build artifact to go
+stale, so a fix is live the moment the host reconnects.
+
+It also resolves against `uv.lock` rather than re-resolving from scratch, which
+turns out to be the same bug wearing a different hat. `pyproject.toml` asks for
+`mcp>=1.2` with no upper bound, so a fresh resolve is free to pick up a new SDK
+major; one did, and the code of the day imported a module that major had
+removed. The lockfile pins a version known to work. Locking the dependency and
+skipping the build cache are one decision, not two.
+
+The server also fills in `serverInfo.version` from the installed distribution.
+An empty version string is what made the stale build take twelve shell commands
+to identify instead of one.
 
 ## What the plugin does not give you
 
