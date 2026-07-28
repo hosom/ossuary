@@ -1,0 +1,46 @@
+{
+ "version": 3,
+ "sessionId": "11111111-2222-3333-4444-555555555555",
+ "creationDate": "2026-07-28T12:00:00.000Z",
+ "requests": [
+  {
+   "requestId": "req1",
+   "timestamp": "2026-07-28T12:00:01.000Z",
+   "message": {
+    "text": "Explain this function."
+   },
+   "response": [
+    {
+     "kind": "markdownContent",
+     "value": "It sorts the list "
+    },
+    {
+     "kind": "markdownContent",
+     "value": "in place."
+    }
+   ],
+   "result": {}
+  },
+  {
+   "requestId": "req2",
+   "timestamp": "2026-07-28T12:01:00.000Z",
+   "message": {
+    "text": "Now run the tests."
+   },
+   "response": [
+    {
+     "kind": "toolInvocationSerialized",
+     "toolId": "copilot_runTests",
+     "invocationMessage": "Running tests",
+     "resultDetails": "2 failed",
+     "isError": true
+    }
+   ],
+   "result": {
+    "errorDetails": {
+     "message": "Tool call failed"
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Run artifacts and rendered reports
+.ossuary/
+report.html
+issues.jsonl
+
+.pytest_cache/
+.ruff_cache/

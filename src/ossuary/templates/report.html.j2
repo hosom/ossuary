@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ossuary report &mdash; {{ manifest.run_id }}</title>
+<style>
+  /* Everything inline: this file must work as a ticket attachment with no network. */
+  :root {
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #6b7280; --line: #e5e7eb;
+    --panel: #f9fafb; --accent: #1f6feb; --code-bg: #f6f8fa;
+    --high: #b42318; --high-bg: #fef3f2; --medium: #b54708; --medium-bg: #fffaeb;
+    --low: #175cd3; --low-bg: #eff8ff; --new: #027a48; --new-bg: #ecfdf3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --line: #30363d;
+      --panel: #161b22; --accent: #58a6ff; --code-bg: #161b22;
+      --high: #ff7b72; --high-bg: #2d1618; --medium: #e3b341; --medium-bg: #2b2411;
+      --low: #79c0ff; --low-bg: #0f2438; --new: #56d364; --new-bg: #0f2b18;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 1.25rem 4rem; background: var(--bg); color: var(--fg);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  header { padding: 2rem 0 1rem; border-bottom: 1px solid var(--line); margin-bottom: 1.5rem; }
+  h1 { margin: 0 0 .25rem; font-size: 1.6rem; letter-spacing: -.01em; }
+  h2 { margin: 2.5rem 0 .75rem; font-size: 1.2rem; padding-bottom: .35rem; border-bottom: 1px solid var(--line); }
+  h3 { margin: 0 0 .35rem; font-size: 1rem; }
+  .sub { color: var(--muted); font-size: .875rem; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .82rem; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: .7rem .85rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+    margin: .5rem 0 0;
+  }
+  .cards { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1.25rem 0; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: .7rem 1rem; min-width: 120px; flex: 1 1 120px;
+  }
+  .card .n { font-size: 1.5rem; font-weight: 600; display: block; line-height: 1.2; }
+  .card .l { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+  .tag {
+    display: inline-block; padding: .1rem .45rem; border-radius: 4px;
+    font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+    vertical-align: middle;
+  }
+  .sev-high { color: var(--high); background: var(--high-bg); }
+  .sev-medium { color: var(--medium); background: var(--medium-bg); }
+  .sev-low { color: var(--low); background: var(--low-bg); }
+  .tag-new { color: var(--new); background: var(--new-bg); }
+  .tag-phase { color: var(--muted); background: var(--panel); border: 1px solid var(--line); }
+  details.cluster {
+    border: 1px solid var(--line); border-radius: 8px; margin-bottom: .75rem;
+    background: var(--panel); overflow: hidden;
+  }
+  details.cluster > summary {
+    cursor: pointer; padding: .8rem 1rem; list-style: none; display: flex;
+    align-items: baseline; gap: .6rem; flex-wrap: wrap;
+  }
+  details.cluster > summary::-webkit-details-marker { display: none; }
+  details.cluster > summary::before { content: "\25B8"; color: var(--muted); font-size: .8rem; }
+  details.cluster[open] > summary::before { content: "\25BE"; }
+  details.cluster > summary:hover { background: var(--code-bg); }
+  .cluster-name { font-weight: 600; flex: 1 1 auto; }
+  .cluster-count { color: var(--muted); font-size: .82rem; white-space: nowrap; }
+  .cluster-body { padding: 0 1rem 1rem; border-top: 1px solid var(--line); }
+  .issue {
+    border-left: 3px solid var(--line); padding: .6rem 0 .6rem .85rem; margin: .9rem 0;
+  }
+  .issue.sev-high-b { border-left-color: var(--high); }
+  .issue.sev-medium-b { border-left-color: var(--medium); }
+  .issue.sev-low-b { border-left-color: var(--low); }
+  .meta { color: var(--muted); font-size: .78rem; margin-top: .3rem; }
+  table { border-collapse: collapse; width: 100%; font-size: .82rem; margin-top: .5rem; }
+  th, td { text-align: left; padding: .4rem .55rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: .7rem; letter-spacing: .04em; }
+  tbody tr:hover { background: var(--panel); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .warn { color: var(--medium); }
+  .table-scroll { overflow-x: auto; }
+  .empty { color: var(--muted); font-style: italic; padding: .6rem 0; }
+  .note {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 6px; padding: .7rem .9rem; margin: 1rem 0; font-size: .85rem;
+  }
+  .ev-head { color: var(--muted); font-size: .76rem; margin-top: .5rem; }
+  a { color: var(--accent); }
+  .controls { margin: 1rem 0; display: flex; gap: .5rem; flex-wrap: wrap; }
+  button {
+    font: inherit; font-size: .82rem; padding: .35rem .7rem; cursor: pointer;
+    background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
+  }
+  button:hover { background: var(--code-bg); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Ossuary report</h1>
+  <div class="sub">
+    Run <code>{{ manifest.run_id }}</code> &middot; generated {{ generated_at }}
+    &middot; scanner <code>{{ manifest.scanner_model }}</code>
+    &middot; clusterer <code>{{ manifest.clusterer_model }}</code>
+    {% if not manifest.redaction_enabled %}
+      &middot; <span class="warn">redaction disabled</span>
+    {% endif %}
+  </div>
+</header>
+
+<h2>Run summary</h2>
+<div class="cards">
+  <div class="card"><span class="n">{{ manifest.session_count | commafy }}</span><span class="l">Sessions</span></div>
+  <div class="card"><span class="n">{{ manifest.event_count | commafy }}</span><span class="l">Events</span></div>
+  <div class="card"><span class="n">{{ issues | length | commafy }}</span><span class="l">Issues</span></div>
+  <div class="card"><span class="n">{{ clusters | length }}</span><span class="l">Clusters</span></div>
+  <div class="card"><span class="n">{{ new_clusters | length }}</span><span class="l">New this run</span></div>
+  <div class="card"><span class="n">{{ manifest.cached_session_count | commafy }}</span><span class="l">From cache</span></div>
+</div>
+
+<div class="cards">
+  <div class="card"><span class="n sev-high" style="background:none">{{ severity_counts.high }}</span><span class="l">High severity</span></div>
+  <div class="card"><span class="n sev-medium" style="background:none">{{ severity_counts.medium }}</span><span class="l">Medium</span></div>
+  <div class="card"><span class="n sev-low" style="background:none">{{ severity_counts.low }}</span><span class="l">Low</span></div>
+  {% for phase, count in phase_counts.items() %}
+  <div class="card"><span class="n">{{ count }}</span><span class="l">Phase: {{ phase }}</span></div>
+  {% endfor %}
+</div>
+
+{% if manifest.sources %}
+<p class="sub">Sources scanned:
+  {% for source, count in manifest.sources.items() %}<code>{{ source }}</code> ({{ count }}){% if not loop.last %}, {% endif %}{% endfor %}
+</p>
+{% endif %}
+
+{% if failed_scans or capped_scans or manifest.errors %}
+<div class="note">
+  <strong>Run caveats.</strong>
+  {% if capped_scans %}{{ capped_scans | length }} session(s) hit the turn cap, so their findings are partial.{% endif %}
+  {% if failed_scans %}{{ failed_scans | length }} session(s) errored during scanning.{% endif %}
+  {% if manifest.errors %}<ul>{% for e in manifest.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+</div>
+{% endif %}
+
+<h2>New issue types this run</h2>
+{% if new_clusters %}
+  <p class="sub">Failure modes not present in the stored taxonomy before this run.</p>
+  {% for entry in new_clusters %}
+  <details class="cluster" open>
+    <summary>
+      <span class="cluster-name">{{ entry.cluster.name }}</span>
+      <span class="tag tag-new">new</span>
+      <span class="cluster-count">{{ entry.session_count }} session(s) &middot; {{ entry.issue_count }} issue(s)</span>
+    </summary>
+    <div class="cluster-body">
+      <p>{{ entry.cluster.summary }}</p>
+    </div>
+  </details>
+  {% endfor %}
+{% else %}
+  <p class="empty">
+    {% if manifest.clusters %}No new failure modes this run &mdash; every cluster matched the stored taxonomy.
+    {% else %}No clusters were produced for this run.{% endif %}
+  </p>
+{% endif %}
+
+<h2>Clusters</h2>
+<p class="sub">Ordered by number of affected sessions.</p>
+{% if clusters %}
+<div class="controls">
+  <button onclick="document.querySelectorAll('details.cluster').forEach(d=>d.open=true)">Expand all</button>
+  <button onclick="document.querySelectorAll('details.cluster').forEach(d=>d.open=false)">Collapse all</button>
+</div>
+{% for entry in clusters %}
+<details class="cluster">
+  <summary>
+    <span class="cluster-name">{{ entry.cluster.name }}</span>
+    {% if entry.cluster.is_new_this_run %}<span class="tag tag-new">new</span>{% endif %}
+    {% for phase in entry.phases %}<span class="tag tag-phase">{{ phase }}</span>{% endfor %}
+    <span class="cluster-count">{{ entry.session_count }} session(s) &middot; {{ entry.issue_count }} issue(s)</span>
+  </summary>
+  <div class="cluster-body">
+    <p>{{ entry.cluster.summary }}</p>
+    <div class="meta">
+      cluster id <code>{{ entry.cluster.cluster_id }}</code>
+      &middot; first seen in run <code>{{ entry.cluster.first_seen_run }}</code>
+    </div>
+
+    {% if entry.example_sessions %}
+    <div class="ev-head">Example sessions</div>
+    <div class="meta">
+      {% for sid in entry.example_sessions %}<code>{{ sid }}</code>{% if not loop.last %} &middot; {% endif %}{% endfor %}
+      {% if entry.cluster.affected_sessions | length > entry.example_sessions | length %}
+        &middot; +{{ entry.cluster.affected_sessions | length - entry.example_sessions | length }} more
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% for issue in entry.members %}
+    <div class="issue sev-{{ issue.severity }}-b">
+      <h3>{{ issue.title }} <span class="tag sev-{{ issue.severity }}">{{ issue.severity }}</span></h3>
+      <div>{{ issue.description }}</div>
+      <div class="meta">
+        session <code>{{ issue.session_id }}</code>
+        &middot; source {{ issue.source }}
+        &middot; phase {{ issue.phase }}
+        &middot; confidence {{ "%.2f"|format(issue.confidence) }}
+        {% if issue.evidence_event_indices %}
+        &middot; events {{ issue.evidence_event_indices | join(", ") }}
+        {% endif %}
+      </div>
+      {% set excerpts = evidence.get(issue.issue_id) %}
+      {% if excerpts %}
+        {% for ex in excerpts %}
+        <div class="ev-head">
+          event {{ ex.index }} &mdash; {{ ex.role }}/{{ ex.kind }}{% if ex.tool_name %} &middot; {{ ex.tool_name }}{% endif %}
+          {% if ex.shape %}
+            &middot; {{ ex.shape.byte_length }} bytes
+            {% if ex.shape.duration_ms is not none %}&middot; {{ ex.shape.duration_ms }}ms{% endif %}
+            {% if ex.shape.exit_code is not none %}&middot; exit {{ ex.shape.exit_code }}{% endif %}
+            {% if not ex.shape.terminates_cleanly %}&middot; <span class="warn">does not terminate cleanly</span>{% endif %}
+            {% if ex.shape.is_round_number %}&middot; <span class="warn">round byte count</span>{% endif %}
+          {% endif %}
+        </div>
+        <pre>{{ ex.text }}</pre>
+        {% endfor %}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</details>
+{% endfor %}
+{% else %}
+<p class="empty">No clusters. {% if issues %}Issues were found but not clustered &mdash; see below.{% else %}No issues were found in this corpus.{% endif %}</p>
+{% endif %}
+
+{% if orphan_issues %}
+<h2>Unclustered issues</h2>
+<p class="sub">
+  Found by the session scanner but not claimed by any cluster. Listed so nothing
+  discovered is silently lost between stages.
+</p>
+{% for issue in orphan_issues %}
+<div class="issue sev-{{ issue.severity }}-b">
+  <h3>{{ issue.title }} <span class="tag sev-{{ issue.severity }}">{{ issue.severity }}</span></h3>
+  <div>{{ issue.description }}</div>
+  <div class="meta">
+    session <code>{{ issue.session_id }}</code> &middot; phase {{ issue.phase }}
+    &middot; confidence {{ "%.2f"|format(issue.confidence) }}
+    {% if issue.evidence_event_indices %}&middot; events {{ issue.evidence_event_indices | join(", ") }}{% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<h2>Tool statistics</h2>
+<p class="sub">
+  Measured across every scanned session. These are the corpus-wide patterns no
+  single-session view can show.
+</p>
+{% if tool_stats %}
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr>
+      <th>Tool</th>
+      <th class="num">Calls</th>
+      <th class="num">Sessions</th>
+      <th class="num">Errors</th>
+      <th class="num">Empty</th>
+      <th class="num">Round</th>
+      <th class="num">Unclean</th>
+      <th class="num">Dupes</th>
+      <th class="num">p50 B</th>
+      <th class="num">p95 B</th>
+      <th class="num">max B</th>
+      <th class="num">p50 ms</th>
+      <th class="num">p95 ms</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for stat in tool_stats %}
+    <tr>
+      <td><code>{{ stat.tool_name }}</code></td>
+      <td class="num">{{ stat.call_count | commafy }}</td>
+      <td class="num">{{ stat.session_count | commafy }}</td>
+      <td class="num {% if stat.error_rate > 0.1 %}warn{% endif %}">
+        {{ stat.error_count }}{% if stat.call_count %} ({{ stat.error_rate | pct }}){% endif %}
+      </td>
+      <td class="num">{{ stat.empty_count }}</td>
+      <td class="num {% if stat.round_number_count > 0 %}warn{% endif %}">{{ stat.round_number_count }}</td>
+      <td class="num">{{ stat.truncated_looking_count }}</td>
+      <td class="num {% if stat.duplicate_rate > 0.2 %}warn{% endif %}">
+        {{ stat.duplicate_result_count }}{% if stat.call_count %} ({{ stat.duplicate_rate | pct }}){% endif %}
+      </td>
+      <td class="num">{{ stat.byte_length_p50 | commafy }}</td>
+      <td class="num">{{ stat.byte_length_p95 | commafy }}</td>
+      <td class="num">{{ stat.byte_length_max | commafy }}</td>
+      <td class="num">{{ stat.duration_ms_p50 if stat.duration_ms_p50 is not none else "—" }}</td>
+      <td class="num">{{ stat.duration_ms_p95 if stat.duration_ms_p95 is not none else "—" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="sub" style="margin-top:.75rem">
+  <strong>Round</strong> counts results whose byte length is an exact cap-shaped
+  number. <strong>Unclean</strong> counts results that do not end at a plausible
+  boundary. <strong>Dupes</strong> counts byte-identical repeated results. All
+  three are measurements, not verdicts.
+</p>
+{% else %}
+<p class="empty">No tool results in this corpus.</p>
+{% endif %}
+
+<h2>Sessions scanned</h2>
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th>Session</th><th>Source</th><th class="num">Issues</th><th class="num">Turns</th><th>Status</th><th>Path</th></tr>
+  </thead>
+  <tbody>
+  {% for scan in manifest.scans %}
+    <tr>
+      <td><code>{{ scan.session_id }}</code></td>
+      <td>{{ scan.source }}</td>
+      <td class="num">{{ scan.issues | length }}</td>
+      <td class="num">{{ scan.turns_used }}</td>
+      <td>
+        {%- if scan.error %}<span class="warn">error</span>
+        {%- elif scan.hit_turn_cap %}<span class="warn">turn cap</span>
+        {%- elif scan.from_cache %}cached
+        {%- else %}ok{% endif -%}
+      </td>
+      <td><code>{{ scan.path }}</code></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<p class="sub" style="margin-top:2.5rem; padding-top:1rem; border-top:1px solid var(--line)">
+  Excerpts are verbatim from the transcripts. Where this report shortened one it
+  says so inline with an <code>[[ossuary:elided N of M bytes]]</code> marker; an
+  excerpt without that marker ends exactly as it does on disk.
+  {% if manifest.redaction_enabled %}
+  Secret-shaped text was masked before any content left the machine.
+  {% else %}
+  <span class="warn">Redaction was disabled for this run.</span>
+  {% endif %}
+</p>
+
+</div>
+</body>
+</html>
