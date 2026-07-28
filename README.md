@@ -111,6 +111,15 @@ look. Recall does not depend on the model's curiosity. The outline is also where
 most anomalies actually surface — as rows rather than as text buried in a
 payload — which is why the plugin prompts insist on reading it in full first.
 
+**One session per context window.** Auditing several sessions spawns one
+`session-investigator` per transcript rather than sweeping the corpus in a single
+context. Two outlines in one window means the second session is read by an agent
+already holding opinions about the first, and findings stop being independent.
+The per-session agent is granted the read tools and `report_issue` and nothing
+else — no way to reach a second transcript, no way to end the run — and
+`tests/test_plugins.py` asserts that, so widening it fails the suite instead of
+quietly costing recall. See [`docs/plugins.md`](docs/plugins.md).
+
 **Adapters parse like archaeologists, not validators.** No line is ever rejected.
 A malformed line becomes a degraded event carrying its raw text and the parse
 error, and parsing continues. Whatever is on disk is the only record that will
