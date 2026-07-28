@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ossuary": {
+      "command": "uvx",
+      "args": ["--from", "ossuary[mcp]", "ossuary-mcp"],
+      "env": {}
+    }
+  }
+}

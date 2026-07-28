@@ -8,19 +8,21 @@ makes one call. Above `BATCH_THRESHOLD` issues it batches and runs a merge pass
 that reconciles the resulting cluster sets. There is deliberately no semantic
 pre-batching or embedding router -- at this scale it buys nothing and adds a
 failure mode that is hard to debug when it silently mis-routes.
+
+Clusters arrive through a tool rather than as a structured final payload. That
+costs a little strictness and buys two things: partial results survive a run
+that stops early, and the agent works identically on backends that have no
+structured-output mode at all.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent, UsageLimits
-from pydantic_ai.settings import ModelSettings
 
 from ..aggregate import render_tool_stats
+from ..backends import AgentBackend, build_backend
 from ..config import AgentConfig
 from ..models import StoredIssue, ToolStats
-from .deps import ClustererDeps
-from .models import resolve_model
 
 # Issue count above which we split into batches and add a merge pass. Set from
 # the section 7 guidance of roughly 1,500 sessions, assuming a few issues per
@@ -50,23 +52,17 @@ class ClusterProposal(BaseModel):
     clusters: list[ProposedCluster] = Field(default_factory=list)
 
 
-def build_clusterer_agent(config: AgentConfig) -> Agent[ClustererDeps, ClusterProposal]:
-    return Agent(
-        resolve_model(config.model),
-        deps_type=ClustererDeps,
-        output_type=ClusterProposal,
-        instructions=config.prompt,
-        model_settings=ModelSettings(
-            temperature=config.temperature,
-            **({"max_tokens": config.max_tokens} if config.max_tokens else {}),
-        ),
-        retries=2,
-        defer_model_check=True,
+def build_clusterer_backend(config: AgentConfig) -> AgentBackend:
+    """Construct Agent B's backend. Does not require credentials."""
+    return build_backend(
+        config.model,
+        temperature=config.temperature,
+        # One turn per cluster plus a closing turn, so the cap has to leave room
+        # for the model to actually report what it found.
+        max_turns=max(config.max_turns, 2),
+        max_tokens=config.max_tokens,
+        extra=config.extra,
     )
-
-
-def clusterer_usage_limits(config: AgentConfig) -> UsageLimits:
-    return UsageLimits(request_limit=max(config.max_turns, 2))
 
 
 def render_issues(issues: list[StoredIssue], *, max_description: int = 600) -> str:
@@ -137,7 +133,16 @@ def build_prompt(
     if batch_note:
         sections.insert(0, batch_note)
         sections.insert(1, "")
+    sections.extend(["", REPORTING_NOTE])
     return "\n".join(sections)
+
+
+REPORTING_NOTE = (
+    "Call propose_cluster once per cluster, as soon as you have decided on it. "
+    "Do not save them up: you have a limited number of turns and anything "
+    "unreported when you run out is lost. When every issue_id has been placed, "
+    "reply with a one-line summary."
+)
 
 
 def batches(issues: list[StoredIssue]) -> list[list[StoredIssue]]:

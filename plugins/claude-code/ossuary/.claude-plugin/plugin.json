@@ -1,0 +1,17 @@
+{
+  "name": "ossuary",
+  "description": "Find health issues in your local LLM agent session transcripts. Claude does the investigating; Ossuary supplies the transcripts, the measurements, and the corpus statistics.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Ossuary"
+  },
+  "homepage": "https://github.com/hosom/ossuary",
+  "repository": "https://github.com/hosom/ossuary",
+  "license": "MIT",
+  "keywords": [
+    "transcripts",
+    "observability",
+    "agent-health",
+    "postmortem"
+  ]
+}

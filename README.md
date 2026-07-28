@@ -39,16 +39,26 @@ Jinja2 → single-file HTML → open browser
 ## Install
 
 ```bash
-uv venv && uv pip install -e .
+uv venv && uv pip install -e '.[claude-code]'
 ```
 
-Set a key for whichever provider `agents.yaml` names, e.g. `ANTHROPIC_API_KEY`.
-Or run entirely locally — see [Privacy](#privacy).
+**No Anthropic API key required.** The default config runs inference through the
+Claude Agent SDK, which uses whatever `claude` is already logged in as —
+including a Pro or Max subscription. `.[copilot]` does the same through the
+GitHub Copilot SDK and a Copilot subscription. `ossuary backends` reports what
+is installed and what each one authenticates as. See
+[docs/backends.md](docs/backends.md) for the full picture, including the API-key
+and fully-local paths.
+
+There is also a plugin for [Claude Code and Copilot CLI](docs/plugins.md) that
+inverts the arrangement: Ossuary exposes the transcripts over MCP and the agent
+you are already talking to does the investigating.
 
 ## Use
 
 ```bash
 ossuary sources                  # what it found on disk, counts per source
+ossuary backends                 # which inference backends are installed
 ossuary scan                     # expensive; writes artifacts to .ossuary/
 ossuary report                   # cheap; renders HTML from artifacts
 ```
@@ -62,6 +72,7 @@ ossuary scan [PATHS...] [--source claude-code|codex|copilot] [--model ...]
 ossuary report [--open/--no-open] [--out report.html]
 ossuary agents test scanner --fixture tests/golden/     # add --live to call the model
 ossuary agents show
+ossuary backends                                        # installed backends and what they authenticate as
 ossuary outline <session-id|path>                       # deterministic, no model
 ossuary taxonomy [--show/--clear]
 ossuary export --out issues.jsonl
@@ -99,6 +110,14 @@ ever exist of that session. See [`docs/formats.md`](docs/formats.md).
 prompt text are in `agents.yaml`; tool implementations and schemas are in Python.
 The prompt's content hash is a cache key, so editing a prompt re-runs inference
 without re-paying for I/O.
+
+**Who runs the inference is a deployment question, not an agent one.** The
+prompts and the tool surface are described once and are byte-identical across
+every backend, so a finding produced under a Claude Max subscription and the same
+finding produced against an API key differ only in who did the reasoning. See
+[`docs/backends.md`](docs/backends.md). The [plugin](docs/plugins.md) inverts the
+arrangement entirely — Ossuary serves the transcripts over MCP and the agent you
+are already talking to investigates.
 
 ## Shape records
 
@@ -142,6 +161,9 @@ agents:
 `OLLAMA_BASE_URL` overrides the default `http://localhost:11434/v1`. For any
 other provider, point `openai-compatible:<model>` at a proxy via
 `OSSUARY_OPENAI_BASE_URL`.
+
+The subscription backends and the MCP server redact on exactly the same path.
+The host agent behind a plugin is a model too, and is treated as one.
 
 ## Caching
 

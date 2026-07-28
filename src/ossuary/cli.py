@@ -53,6 +53,25 @@ def _fail(message: str) -> None:
     raise typer.Exit(code=1)
 
 
+def _require_backends(config, cluster: bool) -> None:  # type: ignore[no-untyped-def]
+    """Fail fast when a configured backend's SDK is not installed."""
+    import importlib.util
+
+    from .backends import split_spec
+
+    needed = {"claude-code": "claude_agent_sdk", "copilot": "copilot"}
+    wanted = [config.scanner.model] + ([config.clusterer.model] if cluster else [])
+    for spec in wanted:
+        name, _ = split_spec(spec)
+        module = needed.get(name)
+        if module and importlib.util.find_spec(module) is None:
+            _fail(
+                f"model {spec!r} needs the {name} backend, which is not installed. "
+                f"Install it with: pip install 'ossuary[{name}]'\n"
+                f"       Run `ossuary backends` to see the alternatives."
+            )
+
+
 @app.command()
 def sources(
     paths: list[Path] = typer.Argument(None, help="Optional explicit paths to search."),
@@ -108,7 +127,12 @@ def scan(
         None, "--source", help=f"Limit to one source: {', '.join(ALL_SOURCES)}"
     ),
     model: str | None = typer.Option(
-        None, "--model", help="Override the scanner model from agents.yaml."
+        None,
+        "--model",
+        help=(
+            "Override the scanner model from agents.yaml, e.g. claude-code:haiku, "
+            "copilot:gpt-5, anthropic:claude-haiku-4-5. See `ossuary backends`."
+        ),
     ),
     limit: int | None = typer.Option(None, "--limit", help="Scan at most N sessions."),
     no_cache: bool = typer.Option(False, "--no-cache", help="Ignore and overwrite the cache."),
@@ -144,6 +168,10 @@ def scan(
             fg=typer.colors.YELLOW,
             err=True,
         )
+
+    # A missing SDK should cost one line, not one traceback per session. Check it
+    # before parsing anything, since parsing a large corpus is not free.
+    _require_backends(config, cluster=not no_cluster)
 
     redactor = Redactor(enabled=not no_redact)
     roots = [Path(p) for p in paths] if paths else None
@@ -247,6 +275,54 @@ def scan(
     path = write_manifest(manifest, base)
     _echo(f"Wrote {path}")
     _echo("Run `ossuary report` to render the HTML report.")
+
+
+@app.command()
+def backends() -> None:
+    """Show which inference backends are installed and what each one authenticates as."""
+    import importlib.util
+    import os
+
+    rows = [
+        (
+            "claude-code",
+            "claude_agent_sdk",
+            "ossuary[claude-code]",
+            "Claude Agent SDK -- whatever `claude` is logged in as, "
+            "including a Pro or Max subscription. No Anthropic API key needed.",
+        ),
+        (
+            "copilot",
+            "copilot",
+            "ossuary[copilot]",
+            "GitHub Copilot SDK -- whatever `gh` is logged in as, "
+            "including a Copilot subscription. No Anthropic API key needed.",
+        ),
+        (
+            "pydantic-ai",
+            "pydantic_ai",
+            "ossuary",
+            "A hosted provider API key (ANTHROPIC_API_KEY and friends), "
+            "or a local endpoint via `ollama:` / `openai-compatible:`.",
+        ),
+    ]
+
+    for name, module, extra, note in rows:
+        installed = importlib.util.find_spec(module) is not None
+        marker = "installed" if installed else f"not installed  (pip install '{extra}')"
+        _echo(f"{name}: {marker}")
+        for line in note.split(". "):
+            if line.strip():
+                _echo(f"    {line.strip().rstrip('.')}.")
+        _echo()
+
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    _echo(f"ANTHROPIC_API_KEY: {'set' if key else 'not set'}")
+    if not key:
+        _echo(
+            "  Without one, set `model: claude-code:...` or `model: copilot:...` "
+            "in agents.yaml. Run `ossuary agents show` to see what is configured."
+        )
 
 
 @app.command()
@@ -364,9 +440,10 @@ def agents_test(
 
     if name == "scanner":
         from .agents.deps import ScannerDeps
-        from .agents.scanner import build_scanner_agent, scanner_usage_limits
+        from .agents.scanner import build_scanner_backend, scanner_prompt
+        from .agents.tools import scanner_tools
 
-        agent = build_scanner_agent(agent_config)
+        backend = build_scanner_backend(agent_config)
         for session in sessions:
             deps = ScannerDeps(
                 store=store,
@@ -374,12 +451,12 @@ def agents_test(
                 session_content_hash=session.content_hash,
                 tool_stats=stats,
             )
-            result = agent.run_sync(
-                f"Investigate this session.\n\n{store.outline(session.session_id)}",
-                deps=deps,
-                usage_limits=scanner_usage_limits(agent_config),
+            result = backend.run(
+                instructions=agent_config.prompt,
+                prompt=scanner_prompt(store.outline(session.session_id)),
+                tools=scanner_tools(deps),
             )
-            _echo(f"\n{session.session_id}: {result.usage.requests} turn(s), {len(deps.collected)} issue(s)")
+            _echo(f"\n{session.session_id}: {result.turns} turn(s), {len(deps.collected)} issue(s)")
             for issue in deps.collected:
                 _echo(f"  [{issue.severity}/{issue.phase}] {issue.title}")
                 _echo(f"      events {issue.evidence_event_indices} conf={issue.confidence:.2f}")
@@ -399,13 +476,23 @@ def agents_show(
         _fail(str(exc))
         return
 
+    from .backends import build_backend, needs_api_key
+
     _echo(f"config: {path}")
     for name, agent_config in sorted(config.agents.items()):
+        backend = build_backend(agent_config.model)
         _echo(f"\n{name}:")
         _echo(f"  model: {agent_config.model}")
-        _echo(f"  temperature: {agent_config.temperature}")
+        _echo(f"  backend: {backend.name}")
+        _echo(f"  credential: {'provider API key' if needs_api_key(agent_config.model) else 'inherited from the SDK'}")
+        if backend.supports_temperature:
+            _echo(f"  temperature: {agent_config.temperature}")
+        else:
+            _echo(f"  temperature: {agent_config.temperature} (ignored; {backend.name} does not expose it)")
         _echo(f"  max_turns: {agent_config.max_turns}")
         _echo(f"  prompt_version: {agent_config.prompt_version}")
+        if agent_config.extra:
+            _echo(f"  extra: {agent_config.extra}")
 
 
 @app.command()

@@ -1,6 +1,22 @@
+# Ossuary's two agents.
+#
+# `model` names the backend as its prefix:
+#
+#   claude-code:haiku            Claude Agent SDK. Uses whatever `claude` is
+#                                logged in as, including a Pro or Max
+#                                subscription. No Anthropic API key required.
+#   copilot:gpt-5                GitHub Copilot SDK. Uses whatever `gh` is
+#                                logged in as. No Anthropic API key required.
+#   anthropic:claude-haiku-4-5   Pydantic AI against the Messages API. Needs
+#                                ANTHROPIC_API_KEY, and is the only backend
+#                                that can pin a temperature.
+#   ollama:qwen2.5-coder         Pydantic AI against a local endpoint.
+#
+# `ossuary backends` shows which of these are installed on this machine.
+
 agents:
   scanner:
-    model: anthropic:claude-haiku-4-5
+    model: claude-code:haiku
     temperature: 0
     max_turns: 15
     prompt: |
@@ -86,9 +102,12 @@ agents:
       plainly rather than inventing something.
 
   clusterer:
-    model: anthropic:claude-sonnet-5
+    model: claude-code:sonnet
     temperature: 0
-    max_turns: 3
+    # One turn per cluster plus a closing turn: clusters are reported through
+    # propose_cluster as they are decided, not returned as one final payload, so
+    # this cap bounds how many failure modes a run can name.
+    max_turns: 40
     prompt: |
       You are grouping issues found across many LLM agent sessions into clusters,
       where each cluster is one recurring failure mode.
@@ -127,6 +146,9 @@ agents:
 
       RULES
 
+      - Report each cluster with propose_cluster the moment you decide on it.
+        Do not save them up: anything unreported when you run out of turns is
+        lost.
       - Every issue_id you were given should appear in exactly one cluster. Do
         not invent issue_ids.
       - A one-off issue that fits nothing else is still worth its own cluster.

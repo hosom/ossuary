@@ -15,16 +15,15 @@ from pathlib import Path
 
 from .agents.clusterer import (
     MERGE_NOTE,
-    ClusterProposal,
     ProposedCluster,
     batches,
-    build_clusterer_agent,
+    build_clusterer_backend,
     build_prompt,
-    clusterer_usage_limits,
     render_cluster_sets,
 )
 from .agents.deps import ClustererDeps, ScannerDeps
-from .agents.scanner import build_scanner_agent, scanner_usage_limits
+from .agents.scanner import build_scanner_backend, scanner_prompt
+from .agents.tools import clusterer_tools, scanner_tools
 from .aggregate import compute_tool_stats, corpus_event_count
 from .cache import Cache
 from .config import OssuaryConfig
@@ -89,30 +88,24 @@ def scan_session(
         tool_stats=tool_stats,
         cache=cache,
     )
-    agent = build_scanner_agent(scanner_config)
-
-    outline = store.outline(session.session_id)
-    prompt = (
-        f"Investigate this session.\n\n{outline}\n\n"
-        f"Call report_issue as soon as you find each issue, then continue. "
-        f"When you have accounted for the whole outline, reply with a one-line "
-        f"summary of what you found."
-    )
+    backend = build_scanner_backend(scanner_config)
 
     error: str | None = None
     hit_cap = False
     turns = 0
     try:
-        result = agent.run_sync(
-            prompt, deps=deps, usage_limits=scanner_usage_limits(scanner_config)
+        result = backend.run(
+            instructions=scanner_config.prompt,
+            prompt=scanner_prompt(store.outline(session.session_id)),
+            tools=scanner_tools(deps),
         )
-        turns = result.usage.requests
+        turns = result.turns
+        hit_cap = result.hit_turn_cap
     except Exception as exc:  # noqa: BLE001
-        # A turn-cap cutoff or provider error still yields whatever the agent
-        # reported before it stopped -- that is the whole reason issues are
-        # collected incrementally rather than returned at the end.
+        # A provider error still yields whatever the agent reported before it
+        # stopped -- that is the whole reason issues are collected incrementally
+        # rather than returned at the end.
         error = f"{type(exc).__name__}: {exc}"
-        hit_cap = "UsageLimit" in type(exc).__name__
 
     issues = [
         StoredIssue(
@@ -154,14 +147,22 @@ def cluster_issues(
         return [], None
 
     clusterer_config = config.clusterer
-    agent = build_clusterer_agent(clusterer_config)
-    limits = clusterer_usage_limits(clusterer_config)
+    backend = build_clusterer_backend(clusterer_config)
     known = taxonomy.known()
     issue_lookup = {issue.issue_id: issue.session_id for issue in issues}
 
     groups = batches(issues)
     proposals: list[ProposedCluster] = []
     error: str | None = None
+
+    def run(prompt: str, batch: list[StoredIssue]) -> list[ProposedCluster]:
+        deps = ClustererDeps(issues=batch, tool_stats=tool_stats)
+        backend.run(
+            instructions=clusterer_config.prompt,
+            prompt=prompt,
+            tools=clusterer_tools(deps),
+        )
+        return deps.collected
 
     try:
         for position, group in enumerate(groups):
@@ -170,13 +171,9 @@ def cluster_issues(
                 if len(groups) > 1
                 else ""
             )
-            prompt = build_prompt(group, tool_stats, known, batch_note=note)
-            result = agent.run_sync(
-                prompt,
-                deps=ClustererDeps(issues=group, tool_stats=tool_stats),
-                usage_limits=limits,
+            proposals.extend(
+                run(build_prompt(group, tool_stats, known, batch_note=note), group)
             )
-            proposals.extend(result.output.clusters)
 
         if len(groups) > 1 and proposals:
             # Merge pass: independent batches will have named the same failure
@@ -185,12 +182,12 @@ def cluster_issues(
             merge_prompt = "\n\n".join(
                 [MERGE_NOTE, render_cluster_sets(proposals), build_prompt([], tool_stats, known)]
             )
-            merged = agent.run_sync(
-                merge_prompt,
-                deps=ClustererDeps(issues=issues, tool_stats=tool_stats),
-                usage_limits=limits,
-            )
-            proposals = merged.output.clusters
+            merged = run(merge_prompt, issues)
+            # An empty merge is a failed merge, not a corpus with no failure
+            # modes. Keeping the unreconciled proposals shows the same problem
+            # twice; dropping them shows nothing at all, which is worse.
+            if merged:
+                proposals = merged
     except Exception as exc:  # noqa: BLE001
         error = f"clustering failed: {type(exc).__name__}: {exc}"
         if not proposals:

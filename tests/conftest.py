@@ -47,3 +47,9 @@ def loaded_store(claude_session: Session) -> SessionStore:
     store = SessionStore()
     store.add(claude_session)
     return store
+
+
+@pytest.fixture
+def golden_root() -> Path:
+    """The fixture corpus root, for tools that discover rather than take a session."""
+    return GOLDEN

@@ -1,13 +1,22 @@
-"""Dependencies injected into agent tools via Pydantic AI's `deps_type`."""
+"""State the agent tools read and write.
+
+Closed over by `agents.tools`, which is the only place these are touched. They
+carry no backend types on purpose: the same deps drive a run whether inference
+came from an API key, a Claude Code subscription, or a Copilot subscription.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from ..aggregate import render_tool_stats
 from ..cache import Cache
 from ..models import Issue, StoredIssue, ToolStats
 from ..store import SessionStore
+
+if TYPE_CHECKING:
+    from .clusterer import ProposedCluster
 
 
 @dataclass
@@ -53,7 +62,12 @@ class ScannerDeps:
 
 @dataclass
 class ClustererDeps:
-    """Agent B needs no tools; it receives its material in the prompt."""
+    """Agent B receives its material in the prompt and reports through one tool.
+
+    `collected` is the same incremental sink as Agent A's: clusters named before
+    a run stops early are kept rather than lost with the final payload.
+    """
 
     issues: list[StoredIssue] = field(default_factory=list)
     tool_stats: list[ToolStats] = field(default_factory=list)
+    collected: list["ProposedCluster"] = field(default_factory=list)

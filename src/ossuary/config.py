@@ -30,6 +30,12 @@ class AgentConfig(BaseModel):
     max_turns: int = Field(default=15, ge=1, le=200)
     max_tokens: int | None = Field(default=None, ge=1)
 
+    #: Backend-specific knobs that have no cross-backend meaning, e.g.
+    #: `reasoning_effort` on Copilot. Deliberately open where the rest of this
+    #: file is closed: a typo here degrades one backend rather than silently
+    #: changing what every agent does.
+    extra: dict[str, Any] = Field(default_factory=dict)
+
     @field_validator("prompt")
     @classmethod
     def _prompt_not_empty(cls, value: str) -> str:
