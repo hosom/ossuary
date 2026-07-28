@@ -98,6 +98,21 @@ class TestManifests:
         server = json.loads(path.read_text(encoding="utf-8"))["mcpServers"]["ossuary"]
         assert "ossuary-mcp" in server["args"]
 
+    @pytest.mark.parametrize(
+        "path", [CLAUDE / ".mcp.json", COPILOT / ".mcp.json"], ids=["claude", "copilot"]
+    )
+    def test_mcp_manifest_names_an_unambiguous_source(self, path: Path):
+        """`--from ossuary` resolves to an unrelated PyPI project (a dice toolkit).
+
+        Whatever this points at has to identify *this* project explicitly -- a
+        bare distribution name silently installs someone else's package, and the
+        only symptom is a plugin whose tools never appear.
+        """
+        args = json.loads(path.read_text(encoding="utf-8"))["mcpServers"]["ossuary"]["args"]
+        source = args[args.index("--from") + 1]
+        assert source != "ossuary", "a bare name resolves to the wrong PyPI project"
+        assert "hosom/ossuary" in source or source.startswith((".", "/")), source
+
     def test_marketplace_points_at_a_real_plugin(self):
         entry = json.loads(MARKETPLACE.read_text(encoding="utf-8"))["plugins"][0]
         source = (MARKETPLACE.parent.parent / entry["source"]).resolve()
