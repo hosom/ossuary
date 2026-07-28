@@ -1,8 +1,10 @@
 # Supporting pi — investigation
 
-**Nothing here is implemented.** This is a feasibility study for a fourth
-adapter, written to the same standard as [`formats.md`](formats.md): what was
-verified, what was derived from source, and what is still unknown.
+**Nothing here is implemented.** This is a feasibility study for supporting pi
+in both directions — as a fourth *source* Ossuary reads, and as a third *host*
+Ossuary ships a plugin for — written to the same standard as
+[`formats.md`](formats.md): what was verified, what was derived from source, and
+what is still unknown.
 
 Verified date: 2026-07-28.
 
@@ -324,3 +326,121 @@ word "pi".
   derived duration includes the model's own generation time. That needs a real
   session with a slow tool call to settle, and until it is settled the duration
   is `derived` and the outline says so.
+
+---
+
+# pi as a host
+
+pi has a plugin system, and most of the Ossuary plugin ports into it unchanged.
+Two things do not, and they are the two the plugin is built on.
+
+> pi "intentionally does not include built-in MCP, sub-agents, permission popups,
+> plan mode, to-dos, or background bash. You can build or install those workflows
+> as extensions or packages."
+>
+> — `docs/usage.md`, Design Principles
+
+So the honest answer to *can it be identical to the Claude Code and Copilot
+plugins* is **no** — not in the sense of shipping the same manifest and the same
+two markdown files and being done. The user-facing experience can be made to look
+the same. Getting there means writing an extension, because pi has no `.mcp.json`
+loader and no subagent runner of its own to hand the work to.
+
+## What ports as-is
+
+| Piece | Claude Code | Copilot | pi |
+|---|---|---|---|
+| Install | `/plugin marketplace add hosom/ossuary` | `copilot plugin install --path …` | `pi install git:github.com/hosom/ossuary` |
+| Manifest | `.claude-plugin/plugin.json` | `plugin.json` | `pi` key in `package.json`, or convention dirs (`extensions/`, `skills/`, `prompts/`) |
+| Skills | `skills/<name>/SKILL.md` | same | same — pi implements the [Agent Skills standard](https://agentskills.io/specification) and reads `SKILL.md` directories |
+| Slash commands | `/ossuary:investigate` | skill invocation | `/skill:investigate`, or a `prompts/*.md` template for a bare `/ossuary-investigate` |
+| Agent definition | `agents/*.md` with `name`/`description`/`tools` frontmatter | `agents/*.agent.md`, same fields | same shape: `name`, `description`, `tools`, `model`, body is the system prompt |
+| Tool restriction | agent frontmatter `tools:` | agent frontmatter `tools:` | `pi --tools <list>`, which allowlists built-in, extension **and** custom tools |
+
+pi installs packages straight from a git repo, so the marketplace step has an
+exact equivalent. `SKILL.md` needs no changes at all — pi even documents pointing
+its `skills` setting at `~/.claude/skills`.
+
+## Gap 1: MCP
+
+Ossuary's entire delivery mechanism is a local MCP server. pi does not load
+`.mcp.json` and has no MCP client. Two ways across:
+
+**A. Depend on `pi-mcp-adapter`** (npm, v2.15.0, actively maintained). It already
+reads `.mcp.json` — the same file the two existing plugins ship — from the
+project root, so the config would port verbatim. Two caveats. It defaults to a
+*proxy* surface: one `mcp({search, tool, args})` tool instead of individually
+named tools, deliberately, to save context. Per-server `directTools: true`
+restores individual registration, but then tool names may carry a server prefix
+(`ossuary_ossuary_outline`), which is the same class of namespacing problem the
+README already documents for Claude Code plugin servers. And it makes Ossuary's
+install story "install pi, install this third-party package, install Ossuary".
+
+**B. Ship our own extension.** ~200–300 lines of TypeScript that spawns
+`ossuary-mcp`, speaks MCP over stdio, and registers each tool with
+`pi.registerTool`. The names stay exactly `ossuary_outline`, `ossuary_read_events`
+and so on — which matters, because those names are what the agent files list and
+what `tests/test_plugins.py` asserts. No third-party dependency, and the whole
+surface stays in this repo where it can be tested.
+
+**Recommendation: B.** It is more code, but it is the only option that keeps the
+tool names, the install instructions and the test invariants aligned with the
+other two plugins. The cost is real and worth stating plainly: it puts the first
+JavaScript into a Python repository, with its own dependency
+(`@modelcontextprotocol/sdk`) and its own way of being broken.
+
+## Gap 2: sub-agents
+
+*One session per context window* is a design decision, not a convenience — the
+plugins spawn one `session-investigator` per transcript specifically so the second
+session is not read by an agent already holding opinions about the first. pi has
+no built-in subagent runner.
+
+It does ship a working example of one (`examples/extensions/subagent/`, ~1150
+lines), and the mechanism is exactly what is needed:
+
+```
+pi --mode json -p --no-session --tools <allowlist> --append-system-prompt <file> "Task: …"
+```
+
+Each child is a separate `pi` process, so context isolation is stronger than in
+either existing host — a separate process cannot see the parent's conversation at
+all. The child loads user-level extensions, so it gets the Ossuary tools; and
+`--tools` allowlists extension tools, so *"the read tools and `report_issue` and
+nothing else"* is enforceable exactly as it is today. Its agent files are markdown
+with `name`/`description`/`tools`/`model` frontmatter, which is the format
+`session-investigator.md` is already written in.
+
+So the fan-out is portable, but the runner has to come from somewhere: vendor a
+trimmed version of the example into the same extension (~150 lines for what
+Ossuary needs — no chains, no parallel UI), or depend on a community package such
+as `pi-subagents-j0k3r`. Vendoring keeps it consistent with the recommendation
+above.
+
+## What would still differ
+
+Even done well:
+
+- **Slash command names.** pi namespaces skills as `/skill:<name>` and prompt
+  templates as `/<filename>`. `/ossuary:investigate` has no exact spelling.
+- **The extension is code, not configuration.** The other two plugins are JSON and
+  markdown a reader can audit in a minute. This one would ship a process spawner.
+  pi's own docs say packages "run with full system access"; ours would too, and
+  should say so.
+- **`test_plugins.py` would need a third dialect.** It normalises the
+  `mcp__<server>__` prefix before comparing toolsets; pi's names are bare, like
+  Copilot's, so the shared assertion has room for it — but the spawn path it
+  checks is a subprocess argv rather than frontmatter, which is a different kind
+  of assertion.
+
+## Staging
+
+The two halves are independent and the first is much cheaper:
+
+1. **Skills + MCP extension.** *"Have a look at my recent sessions"* works
+   end-to-end, single-session-at-a-time. This is the parity that matters.
+2. **The subagent spawner**, for `investigate` across a corpus.
+3. **The adapter** (first half of this document), so pi can read its own
+   transcripts. Independent of both — worth noting that today a pi user
+   investigating with Ossuary would find every session on the machine *except*
+   their own.
