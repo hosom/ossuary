@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "ossuary": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--project",
+        "${CLAUDE_PLUGIN_ROOT}/../../..",
+        "ossuary-mcp"
+      ],
+      "env": {}
+    }
+  }
+}

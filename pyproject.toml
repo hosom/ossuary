@@ -1,0 +1,32 @@
+[project]
+name = "ossuary"
+version = "0.1.0"
+description = "Find health issues in local LLM agent session transcripts, from inside Claude Code or Copilot CLI."
+readme = "README.md"
+requires-python = ">=3.11"
+# Ossuary runs no inference of its own: the host agent does that, on the other
+# side of the MCP boundary. So there is no model SDK here, and no API client.
+dependencies = [
+    "mcp>=1.2",
+    "pydantic>=2.9",
+    "typer>=0.12",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+ossuary = "ossuary.cli:app"
+ossuary-mcp = "ossuary.mcp_server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ossuary"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

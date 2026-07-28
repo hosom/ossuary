@@ -1,0 +1,1142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ossuary &mdash; run run-20260301T091500Z</title>
+<style>
+  /* Everything inline: this file must work as a ticket attachment with no
+     network. That rules out the brand's webfonts, so each role falls back down
+     a stack that keeps its character -- inscriptional caps, an old-style serif,
+     a tabular mono. */
+  :root {
+    --void: #12100E; --pit: #0E0C0B; --panel: #1A1715; --crypt: #1C1917;
+    --seam: #2A2723; --bone: #E6DFD1; --dust: #8C867D; --ash: #5A554D;
+    --faint: #6E6A63; --dim: #4A463F; --quiet: #7C766D; --body-fg: #A39D93;
+    --verdigris: #4E8F7C; --rust: #9C4A3C; --brass: #C8A24A;
+    --verdigris-fg: #7FB8A5; --rust-fg: #C97F6E; --brass-fg: #D6B978;
+    --verdigris-edge: #2F5A4E; --rust-edge: #6B3328; --brass-edge: #6B5A2B;
+    --verdigris-wash: #15211D; --rust-wash: #231512; --brass-wash: #221D12;
+    --ash-wash: #171513;
+    --display: "Cinzel", "Trajan Pro", Optima, "Palatino Linotype", Palatino, Georgia, serif;
+    --body: "Spectral", Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--void); }
+  body { color: var(--bone); font-family: var(--body); font-weight: 300; padding-bottom: 140px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 48px; }
+
+  /* ---- masthead ---- */
+  .masthead {
+    position: sticky; top: 0; z-index: 20; background: rgba(18,16,14,.95);
+    backdrop-filter: blur(6px); border-bottom: 1px solid var(--seam);
+  }
+  .masthead .wrap {
+    padding-top: 16px; padding-bottom: 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  }
+  .lockup { display: flex; align-items: center; gap: 12px; }
+  .wordmark {
+    font-family: var(--display); font-size: 15px; letter-spacing: 5px;
+    text-transform: uppercase; color: var(--bone);
+  }
+  .masthead-meta {
+    display: flex; align-items: center; gap: 28px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.8px; color: var(--faint);
+  }
+  .masthead-meta .dimmed { color: var(--dim); }
+
+  /* ---- type roles ---- */
+  .kicker {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 3.4px;
+    color: var(--faint); text-transform: uppercase;
+  }
+  .label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 2.2px;
+    color: var(--verdigris); text-transform: uppercase;
+  }
+  .mono { font-family: var(--mono); }
+  .data { font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px; color: var(--faint); }
+  h1 {
+    margin: 0; font-family: var(--display); font-weight: 400; font-size: 44px;
+    line-height: 1.16; letter-spacing: 1.5px; color: var(--bone);
+    max-width: 26ch; text-wrap: pretty;
+  }
+  .sec { display: flex; align-items: baseline; gap: 18px; padding: 84px 0 20px; }
+  .sec-n { font-family: var(--mono); font-size: 11px; letter-spacing: 2.4px; color: var(--verdigris); }
+  h2 {
+    margin: 0; font-family: var(--display); font-weight: 400; font-size: 23px;
+    letter-spacing: 5px; text-transform: uppercase; color: var(--bone);
+  }
+  h3 { margin: 0; font-family: var(--body); font-weight: 400; font-size: 17px; line-height: 1.4; color: var(--bone); }
+  .prose { font-size: 16px; line-height: 1.6; color: var(--dust); max-width: 64ch; text-wrap: pretty; }
+  .sec + .prose { padding-bottom: 32px; }
+  code { font-family: var(--mono); font-size: .88em; color: var(--body-fg); }
+
+  /* ---- hero ---- */
+  .hero { padding-top: 72px; }
+  .hero .kicker { padding-bottom: 22px; }
+  .hero-status { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 26px; }
+  .verdict {
+    display: grid; grid-template-columns: 5px 1fr; margin-top: 44px;
+    border: 1px solid var(--seam); background: var(--panel);
+  }
+  .verdict-body { padding: 34px 36px; display: flex; flex-direction: column; gap: 18px; }
+  .verdict-lede { font-size: 21px; line-height: 1.55; color: var(--bone); max-width: 62ch; text-wrap: pretty; }
+  .verdict-detail { font-size: 16px; line-height: 1.62; color: var(--dust); max-width: 68ch; text-wrap: pretty; }
+
+  /* ---- chips: mono uppercase, 6px dot, colour never alone ---- */
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px; padding: 7px 13px;
+    border: 1px solid var(--seam); background: var(--ash-wash);
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.8px;
+    text-transform: uppercase; color: var(--dust); white-space: nowrap;
+  }
+  .chip i { width: 6px; height: 6px; border-radius: 50%; background: var(--ash); }
+  .chip-high, .chip-failed { border-color: var(--rust-edge); background: var(--rust-wash); color: var(--rust-fg); }
+  .chip-high i, .chip-failed i { background: var(--rust); }
+  .chip-medium, .chip-degraded { border-color: var(--brass-edge); background: var(--brass-wash); color: var(--brass-fg); }
+  .chip-medium i, .chip-degraded i { background: var(--brass); }
+  .chip-low { border-color: var(--seam); background: var(--ash-wash); color: var(--dust); }
+  .chip-low i { background: var(--bone); }
+  .chip-clean, .chip-passed, .chip-new { border-color: var(--verdigris-edge); background: var(--verdigris-wash); color: var(--verdigris-fg); }
+  .chip-clean i, .chip-passed i, .chip-new i { background: var(--verdigris); }
+  .chip-sm { padding: 5px 10px; font-size: 9.5px; letter-spacing: 1.6px; }
+  .chip-sm i { width: 5px; height: 5px; }
+
+  /* ---- gridded panels: 1px seams, no radii ---- */
+  .grid { display: grid; gap: 1px; background: var(--seam); border: 1px solid var(--seam); }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  .grid-2 { grid-template-columns: 1.4fr 1fr; }
+  .grid.attach { border-top: none; }
+  .cell { background: var(--pit); padding: 24px 26px 26px; display: flex; flex-direction: column; gap: 11px; }
+  .cell-label { font-family: var(--mono); font-size: 9.5px; letter-spacing: 2px; color: var(--faint); text-transform: uppercase; }
+  .cell-value { font-family: var(--mono); font-size: 24px; letter-spacing: -.4px; color: var(--bone); }
+  .cell-value.small { font-size: 13px; letter-spacing: 0; overflow-wrap: anywhere; }
+  .cell-note { font-size: 13.5px; line-height: 1.5; color: var(--quiet); }
+  .v-rust { color: var(--rust-fg); } .v-brass { color: var(--brass-fg); }
+  .v-verdigris { color: var(--verdigris-fg); } .v-ash { color: var(--ash); }
+  .panel { background: var(--pit); padding: 34px 36px; display: flex; flex-direction: column; gap: 24px; }
+  .plate { border: 1px solid var(--seam); background: var(--pit); padding: 34px 36px 30px; }
+
+  /* ---- the dot strip: one dot = one session ---- */
+  .strip { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ash); }
+  .bars { display: flex; align-items: flex-end; gap: 5px; height: 72px; margin-top: 26px; }
+  .bar { width: 10px; background: var(--ash); opacity: .55; }
+  /* Single-class selectors, declared after .dot/.bar, so the severity colour wins. */
+  .d-high { background: var(--rust); } .d-medium { background: var(--brass); }
+  .d-low { background: var(--bone); } .d-clean { background: var(--verdigris); }
+  .d-error { background: var(--ash); } .d-verdigris { background: var(--verdigris); }
+  .d-rust { background: var(--rust); }
+  .strip-foot {
+    display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--seam);
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px; color: var(--dim);
+  }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .legend i { width: 6px; height: 6px; border-radius: 50%; }
+
+  /* ---- meters ---- */
+  .meters { display: flex; flex-direction: column; gap: 18px; }
+  .meter { display: flex; flex-direction: column; gap: 9px; }
+  .meter-head {
+    display: flex; justify-content: space-between; gap: 16px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px; color: var(--dust);
+  }
+  .meter-head b { font-weight: 400; color: var(--bone); }
+  .meter-track { height: 7px; background: var(--crypt); }
+  .meter-fill { height: 7px; background: var(--verdigris); }
+  .meter-fill.f-high { background: var(--rust); } .meter-fill.f-medium { background: var(--brass); }
+  .meter-fill.f-low { background: var(--bone); } .meter-fill.f-clean { background: var(--verdigris); }
+  .toolrows { display: flex; flex-direction: column; gap: 1px; background: var(--crypt); }
+  .toolrow {
+    background: var(--pit); display: flex; justify-content: space-between;
+    align-items: center; gap: 16px; padding: 11px 0;
+  }
+  .toolrow-name { font-family: var(--mono); font-size: 12px; color: var(--body-fg); }
+  .toolrow-right { display: flex; align-items: center; gap: 12px; }
+  .toolrow-dots { display: flex; gap: 3px; }
+  .toolrow-dots i { width: 6px; height: 6px; border-radius: 50%; }
+  .toolrow-count { font-family: var(--mono); font-size: 11px; color: var(--faint); min-width: 42px; text-align: right; }
+  .approx { color: var(--dim); }
+  .caption { font-size: 13.5px; line-height: 1.55; color: var(--quiet); text-wrap: pretty; }
+
+  /* ---- cluster / issue rows ---- */
+  .rows { display: flex; flex-direction: column; gap: 1px; background: var(--seam); border: 1px solid var(--seam); }
+  details.row { background: var(--pit); }
+  details.row > summary {
+    display: grid; grid-template-columns: 62px 1fr auto auto; gap: 24px;
+    align-items: center; padding: 22px 28px; cursor: pointer; list-style: none;
+  }
+  details.row > summary::-webkit-details-marker { display: none; }
+  details.row > summary:hover { background: #141210; }
+  .row-n { font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px; color: var(--dim); }
+  .row-main { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+  .row-title { font-size: 18.5px; line-height: 1.4; color: var(--bone); text-wrap: pretty; }
+  .row-locus {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px;
+    color: var(--faint); text-transform: uppercase;
+  }
+  .row-caret { font-family: var(--mono); font-size: 15px; color: var(--dim); width: 16px; text-align: center; }
+  .row-caret::after { content: "+"; }
+  details.row[open] .row-caret::after { content: "\2013"; }
+  .row-body { padding: 4px 28px 30px 114px; display: flex; flex-direction: column; gap: 20px; }
+  .row-body > .prose { font-size: 16.5px; line-height: 1.68; color: var(--body-fg); max-width: 70ch; }
+  .provenance {
+    display: flex; gap: 36px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px; color: var(--faint);
+  }
+  .finding { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+  .finding-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .finding-body { font-size: 15.5px; line-height: 1.62; color: var(--dust); max-width: 70ch; text-wrap: pretty; }
+  .evidence-head {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px;
+    color: var(--faint); text-transform: uppercase; margin-top: 6px;
+  }
+  pre {
+    margin: 0; border-left: 2px solid var(--seam); padding: 4px 0 4px 20px;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.75; color: var(--dust);
+    white-space: pre-wrap; word-break: break-word; overflow-x: auto;
+  }
+
+  /* ---- controls ---- */
+  .sec-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  .switches { display: flex; gap: 1px; background: var(--seam); border: 1px solid var(--seam); }
+  .switches button {
+    margin: 0; border: 0; background: var(--pit); padding: 8px 15px; cursor: pointer;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.8px;
+    color: var(--faint); text-transform: uppercase;
+  }
+  .switches button:hover { color: var(--bone); }
+  .switches button[aria-pressed="true"] { background: var(--crypt); color: var(--bone); }
+
+  /* ---- tables ---- */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--seam); background: var(--pit); }
+  table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 11.5px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--seam); white-space: nowrap; }
+  th {
+    color: var(--faint); font-weight: 400; text-transform: uppercase;
+    font-size: 9.5px; letter-spacing: 1.8px; background: var(--crypt);
+  }
+  td { color: var(--body-fg); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: #141210; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .warn { color: var(--brass-fg); }
+  .bad { color: var(--rust-fg); }
+  .inert { color: var(--dim); }
+
+  .note {
+    border: 1px solid var(--seam); border-left: 3px solid var(--brass);
+    background: var(--pit); padding: 22px 26px; margin-top: 32px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .note ul { margin: 0; padding-left: 20px; }
+  .note li { font-size: 14.5px; line-height: 1.6; color: var(--dust); }
+  .empty { font-family: var(--mono); font-size: 11.5px; letter-spacing: 1.4px; color: var(--faint); padding: 8px 0; }
+
+  footer {
+    display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap;
+    margin-top: 96px; padding-top: 24px; border-top: 1px solid var(--seam);
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.8px; color: var(--dim);
+  }
+  .colophon { margin-top: 28px; font-size: 14.5px; line-height: 1.65; color: var(--quiet); max-width: 78ch; text-wrap: pretty; }
+
+  @media (max-width: 860px) {
+    .wrap { padding: 0 24px; }
+    h1 { font-size: 32px; }
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-2 { grid-template-columns: 1fr; }
+    details.row > summary { grid-template-columns: 1fr auto; }
+    .row-n, .row-caret { display: none; }
+    .row-body { padding-left: 28px; }
+  }
+</style>
+</head>
+<body>
+
+
+<div class="masthead">
+  <div class="wrap">
+    <div class="lockup">
+      <svg width="26" height="26" viewBox="0 0 64 64" role="img" aria-label="Ossuary">
+        <path d="M14 58 L14 27 A18 18 0 0 1 50 27 L50 58" fill="none" stroke="#E6DFD1" stroke-width="3.2"></path>
+        <rect x="8" y="57.4" width="48" height="4" fill="#E6DFD1"></rect>
+        <circle cx="25" cy="28" r="3.2" fill="#E6DFD1"></circle><circle cx="39" cy="28" r="3.2" fill="#E6DFD1"></circle>
+        <circle cx="25" cy="41" r="3.2" fill="#4E8F7C"></circle><circle cx="39" cy="41" r="3.2" fill="#9C4A3C"></circle>
+      </svg>
+      <div class="wordmark">Ossuary</div>
+    </div>
+    <div class="masthead-meta">
+      <div>RUN run-20260301T091500Z</div>
+      <div class="dimmed">POSTMORTEM &middot; 2026.07.28</div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="hero">
+    <div class="kicker">Corpus postmortem</div>
+    <h1>Completion reported past the boundary of what was examined</h1>
+    <div class="hero-status">
+      <span class="chip chip-failed"><i></i>Failed</span>
+      <span class="data">
+        5 SESSIONS EXAMINED &middot;
+        6 ISSUES &middot;
+        3 CLUSTERS
+      </span>
+    </div>
+  </div>
+
+  <div class="verdict">
+    <div style="background: var(--rust)"></div>
+    <div class="verdict-body">
+      <div class="label">Dominant failure mode</div>
+      <div class="verdict-lede">Three sessions closed with a claim wider than the evidence behind it: a suite declared green off a masked exit code, a dependency question answered from an installer summary rather than the pins it asked about, and a directory declared clean after two of its five files were opened. The diagnosis in each case may be sound; what fails is the coverage sentence wrapped around it, which is the part a reader relies on to stop looking.</div>
+      <div class="verdict-detail">6 issues in 4 of 5 sessions — 3 high, 1 medium, 2 low. 3 clusters, 2 new this run.</div>
+    </div>
+  </div>
+
+  <!-- ================= Run summary ================= -->
+  <div class="sec">
+    <div class="sec-n">01</div>
+    <h2>Run summary</h2>
+  </div>
+
+  <div class="grid grid-4">
+    <div class="cell">
+      <div class="cell-label">Sessions</div>
+      <div class="cell-value">5</div>
+      <div class="cell-note">
+        
+          claude-code 5
+        
+      </div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Events</div>
+      <div class="cell-value">47</div>
+      <div class="cell-note">normalized across every adapter</div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Issues</div>
+      <div class="cell-value v-rust">6</div>
+      <div class="cell-note">
+        3 high &middot; 1 medium &middot; 2 low
+      </div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Clusters</div>
+      <div class="cell-value">3</div>
+      <div class="cell-note">
+        2 new this run &middot; 0 unclustered
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-4 attach">
+    <div class="cell">
+      <div class="cell-label">Affected sessions</div>
+      <div class="cell-value">4</div>
+      <div class="cell-note">80.0% of the corpus carried a finding</div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Investigator</div>
+      <div class="cell-value small">Claude Code / claude-example-1 (synthetic sample)</div>
+      <div class="cell-note">as reported by the agent itself</div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Wall clock</div>
+      <div class="cell-value">00:06:12</div>
+      <div class="cell-note">
+        2026-03-01 09:15 &rarr;
+        09:21 UTC
+      </div>
+    </div>
+    <div class="cell">
+      <div class="cell-label">Redaction</div>
+      <div class="cell-value v-verdigris">
+        ON
+      </div>
+      <div class="cell-note">
+        secret-shaped text masked before egress
+        
+      </div>
+    </div>
+  </div>
+
+  
+
+  <!-- ================= Corpus trace ================= -->
+  <div class="sec">
+    <div class="sec-n">02</div>
+    <h2>Corpus trace</h2>
+  </div>
+  <div class="prose">
+    One dot per scanned session, in scan order, coloured by the worst thing found in it.
+    The bars below share the rhythm and stand for issue count.
+    Hover a session to read it.
+  </div>
+
+  <div class="plate">
+    
+    <div class="strip">
+      <div class="dot d-high" title="sess-example-0001 — 1 issue"></div><div class="dot d-high" title="sess-example-0002 — 2 issues"></div><div class="dot d-high" title="sess-example-0003 — 1 issue"></div><div class="dot d-low" title="sess-example-0004 — 2 issues"></div><div class="dot d-clean" title="sess-example-0005 — 0 issues"></div>
+    </div>
+    
+    <div class="bars">
+      <div class="bar d-high" style="height: 39px" title="sess-example-0001 — 1 issue"></div><div class="bar d-high" style="height: 72px" title="sess-example-0002 — 2 issues"></div><div class="bar d-high" style="height: 39px" title="sess-example-0003 — 1 issue"></div><div class="bar d-low" style="height: 72px" title="sess-example-0004 — 2 issues"></div><div class="bar d-clean" style="height: 6px" title="sess-example-0005 — 0 issues"></div>
+    </div>
+    
+    <div class="strip-foot">
+      <div class="legend">
+        <span><i style="background: var(--rust)"></i>HIGH</span>
+        <span><i style="background: var(--brass)"></i>MEDIUM</span>
+        <span><i style="background: var(--bone)"></i>LOW</span>
+        <span><i style="background: var(--verdigris)"></i>CLEAN</span>
+        <span><i style="background: var(--ash)"></i>ERRORED</span>
+      </div>
+      <div>5 SESSIONS</div>
+    </div>
+    
+  </div>
+
+  <!-- ================= New issue types this run ================= -->
+  <div class="sec">
+    <div class="sec-n">03</div>
+    <h2>New issue types this run</h2>
+  </div>
+  <div class="prose">Failure modes not present in the stored taxonomy before this run.</div>
+
+  
+  <div class="grid" style="grid-template-columns: repeat(2, 1fr)">
+    
+    <div class="cell" style="padding: 32px 30px 36px; gap: 16px">
+      <div class="label">1 session(s) &middot; 1 issue(s)</div>
+      <div style="font-size: 19px; line-height: 1.42; color: var(--bone); text-wrap: pretty">An output ceiling read as the complete answer</div>
+      <div style="font-size: 15.5px; line-height: 1.62; color: var(--dust); text-wrap: pretty">A tool result landed on exactly 30000 bytes and stopped mid-token, and the agent described it as the complete dependency tree and counted from it. Exactly-round byte counts are the signature of a cap rather than a coincidence, and the shape record carried both that and the ragged ending without the payload being read.</div>
+      <div class="row-locus" style="margin-top: auto; padding-top: 14px">FIRST SEEN run-20260301T091500Z</div>
+    </div>
+    
+    <div class="cell" style="padding: 32px 30px 36px; gap: 16px">
+      <div class="label">1 session(s) &middot; 2 issue(s)</div>
+      <div style="font-size: 19px; line-height: 1.42; color: var(--bone); text-wrap: pretty">Overhead the session paid for with nothing to attribute it to</div>
+      <div style="font-size: 15.5px; line-height: 1.62; color: var(--dust); text-wrap: pretty">An instruction delivered twice at the same timestamp, once as a message and once as IDE selection context, and an 18-second grep returning two lines in a session where reads finish in milliseconds. Neither changed an outcome. Both are costs the transcript records without recording a cause, and the second cannot be separated from a human sitting at a permission prompt.</div>
+      <div class="row-locus" style="margin-top: auto; padding-top: 14px">FIRST SEEN run-20260301T091500Z</div>
+    </div>
+    
+  </div>
+  
+
+  <!-- ================= Clusters ================= -->
+  <div class="sec sec-bar">
+    <div style="display: flex; align-items: baseline; gap: 18px">
+      <div class="sec-n">04</div>
+      <h2>Clusters</h2>
+    </div>
+    
+    <div id="sev-filter" style="display: flex; gap: 12px; flex-wrap: wrap">
+      <div class="switches">
+        <button type="button" data-sev="all" aria-pressed="true">All 3</button>
+        <button type="button" data-sev="high" aria-pressed="false">High</button>
+        <button type="button" data-sev="medium" aria-pressed="false">Medium</button>
+        <button type="button" data-sev="low" aria-pressed="false">Low</button>
+      </div>
+      <div class="switches">
+        <button type="button" id="expand-all">Expand all</button>
+        <button type="button" id="collapse-all">Collapse all</button>
+      </div>
+    </div>
+    
+  </div>
+  <div class="prose">Ordered by number of affected sessions. Severity is the worst issue in the cluster.</div>
+
+  
+  <div class="rows" id="cluster-rows">
+    
+    <details class="row" data-sev="high">
+      <summary>
+        <div class="row-n">C-01</div>
+        <div class="row-main">
+          <div class="row-title">Completion reported past the boundary of what was examined</div>
+          <div class="row-locus">
+            3 SESSION(S) &middot; 3 ISSUE(S) &middot; MODEL
+          </div>
+        </div>
+        <div class="chip chip-high chip-sm"><i></i>high</div>
+        <div class="row-caret"></div>
+      </summary>
+      <div class="row-body">
+        <div class="prose">Three sessions closed with a claim wider than the evidence behind it: a suite declared green off a masked exit code, a dependency question answered from an installer summary rather than the pins it asked about, and a directory declared clean after two of its five files were opened. The diagnosis in each case may be sound; what fails is the coverage sentence wrapped around it, which is the part a reader relies on to stop looking.</div>
+        <div class="provenance">
+          <div>CLUSTER <span style="color: var(--body-fg)">completion-past-what-was-examined</span></div>
+          <div>FIRST SEEN IN RUN <span style="color: var(--body-fg)">run-20260222T140200Z</span></div>
+        </div>
+
+        
+        <div>
+          <div class="evidence-head">Example sessions</div>
+          <div class="provenance" style="margin-top: 8px">
+            <div>
+              <code>sess-example-0001</code> &middot; <code>sess-example-0002</code> &middot; <code>sess-example-0003</code>
+            </div>
+          </div>
+        </div>
+        
+
+        
+        <div class="finding">
+          <div class="finding-head">
+            <h3>`EXIT=0` came from `tail`, so a failing suite was reported as passing</h3>
+            <span class="chip chip-high chip-sm"><i></i>high</span>
+          </div>
+          <div class="finding-body">Event 4 runs `pytest -q 2&gt;&amp;1 | tail -3; echo &#34;EXIT=$?&#34;`. In a pipeline `$?` holds the status of the last command, which is `tail`, and `tail` succeeds whenever it can read its input. The captured output says `1 failed, 42 passed` three lines above the `EXIT=0` the agent quoted.
+
+At event 5 the agent reported the suite green and called the task done. The user caught it from CI and the agent diagnosed it correctly at event 7, so the cost was one wasted round trip and a red build - but nothing in the transcript would have caught it otherwise.
+
+`set -o pipefail`, or running pytest without the pipe, removes the failure mode entirely.</div>
+          <div class="provenance">
+            <div>SESSION <span style="color: var(--body-fg)">sess-example-0001</span></div>
+            <div>CLAUDE-CODE &middot; MODEL</div>
+            <div>CONFIDENCE <span style="color: var(--body-fg)">0.95</span></div>
+            
+            <div>EVENTS <span style="color: var(--body-fg)">4, 5, 7</span></div>
+            
+          </div>
+          
+          
+            
+            <div class="evidence-head">
+              EVENT 4 &middot; assistant/message
+            </div>
+            <pre>Now the tests.</pre>
+            
+            <div class="evidence-head">
+              EVENT 5 &middot; assistant/tool_call &middot; Bash
+            </div>
+            <pre>{&#34;command&#34;: &#34;pytest -q 2&gt;&amp;1 | tail -3; echo \&#34;EXIT=$?\&#34;&#34;}</pre>
+            
+            <div class="evidence-head">
+              EVENT 7 &middot; assistant/message
+            </div>
+            <pre>The suite passes (EXIT=0, 42 passed). Pagination is done.</pre>
+            
+          
+        </div>
+        
+        <div class="finding">
+          <div class="finding-head">
+            <h3>Claimed to have checked every handler after reading two of five</h3>
+            <span class="chip chip-high chip-sm"><i></i>high</span>
+          </div>
+          <div class="finding-body">The request named a directory. Event 2 lists five files in it; events immediately after read two of them, retry.py and charge.py. refund.py, settle.py and webhook.py were never opened by any call in the session.
+
+Event 6 opens &#34;I checked every handler in orchard/billing/&#34; and closes &#34;The other handlers are clean&#34; - a positive claim about three files that were listed and never read.
+
+The diagnosis it reaches may well be right. What is wrong is the coverage claim wrapped around it, which is the part a reader would rely on to stop looking.</div>
+          <div class="provenance">
+            <div>SESSION <span style="color: var(--body-fg)">sess-example-0003</span></div>
+            <div>CLAUDE-CODE &middot; MODEL</div>
+            <div>CONFIDENCE <span style="color: var(--body-fg)">0.95</span></div>
+            
+            <div>EVENTS <span style="color: var(--body-fg)">2, 6</span></div>
+            
+          </div>
+          
+          
+            
+            <div class="evidence-head">
+              EVENT 2 &middot; assistant/tool_call &middot; Bash
+            </div>
+            <pre>{&#34;command&#34;: &#34;ls orchard/billing/&#34;}</pre>
+            
+            <div class="evidence-head">
+              EVENT 6 &middot; assistant/tool_call &middot; Read
+            </div>
+            <pre>{&#34;file_path&#34;: &#34;orchard/billing/charge.py&#34;}</pre>
+            
+          
+        </div>
+        
+        <div class="finding">
+          <div class="finding-head">
+            <h3>The upgrade was run against requirements.txt, which the agent never read</h3>
+            <span class="chip chip-medium chip-sm"><i></i>medium</span>
+          </div>
+          <div class="finding-body">The user asked what changed. The agent inspected the installed tree at event 2, then upgraded from `requirements.txt` at event 3 without ever opening that file, and reported &#34;38 packages moved&#34; from the installer&#39;s own summary.
+
+Nothing here is wrong exactly, but the question asked - what changed - is answered by a diff of pins the agent never looked at. The reply describes the installer&#39;s output instead.</div>
+          <div class="provenance">
+            <div>SESSION <span style="color: var(--body-fg)">sess-example-0002</span></div>
+            <div>CLAUDE-CODE &middot; MODEL</div>
+            <div>CONFIDENCE <span style="color: var(--body-fg)">0.60</span></div>
+            
+            <div>EVENTS <span style="color: var(--body-fg)">3</span></div>
+            
+          </div>
+          
+          
+            
+            <div class="evidence-head">
+              EVENT 3 &middot; user/tool_result &middot; Bash
+                &middot; 30,000 BYTES &middot; 4100MS &middot; <span class="warn">ROUND BYTE COUNT</span>
+            </div>
+            <pre>orchard-vendor-pkg-0000==1.0.0
+orchard-vendor-pkg-0001==1.1.1
+orchard-vendor-pkg-0002==1.2.2
+orchard-vendor-pkg-0003==1.3.3
+orchard-vendor-pkg-0004==1.4.4
+orchard-vendor-pkg-0005==1.5.5
+orchard-vendor-pkg-0006==1.6.6
+orchard-vendor-pkg-0007==1.7.0
+orchard-vendor-pkg-0008==1.8.1
+orchard-vendor-pkg-0009==1.9.2
+orchard-vendor-pkg-0010==1.10.3
+orchard-vendor-pkg-0011==1.11.4
+orchard-vendor-pkg-0012==1.12.5
+orchard-vendor-pkg-0013==1.13.6
+orchard-vendor-pkg-0014==1.14.0
+orchard-vendor-pkg-0015==1.15.1
+orchard-vendor-pkg-0016==1.16.2
+orchard-vendor-pkg-0017==1.17.3
+orchard-vendor-pkg-0018==1.18.4
+orchard-vendor-pkg-0019==1.19.5
+orchard-vendor-pkg-0020==1.20.6
+orchard-vendor-pkg-0021==1.21.0
+orchard-vendor-pkg-0022==1.22.1
+orchard-vendor-pkg-0023==1.23.2
+orchard-vendor
+[[ossuary:elided 28841 of 30000 bytes]]
+.1
+orchard-vendor-pkg-0933==1.13.2
+orchard-vendor-pkg-0934==1.14.3
+orchard-vendor-pkg-0935==1.15.4
+orchard-vendor-pkg-0936==1.16.5
+orchard-vendor-pkg-0937==1.17.6
+orchard-vendor-pkg-0938==1.18.0
+orchard-vendor-pkg-0939==1.19.1
+orchard-vendor-pkg-0940==1.20.2
+orchard-vendor-pkg-0941==1.21.3
+orchard-vendor-pkg-0942==1.22.4
+orchard-vendor-pkg-0943==1.23.5
+orchard-vendor-pkg-0944==1.24.6
+</pre>
+            
+          
+        </div>
+        
+      </div>
+    </details>
+    
+    <details class="row" data-sev="high">
+      <summary>
+        <div class="row-n">C-02</div>
+        <div class="row-main">
+          <div class="row-title">An output ceiling read as the complete answer</div>
+          <div class="row-locus">
+            1 SESSION(S) &middot; 1 ISSUE(S) &middot; HARNESS &middot; NEW
+          </div>
+        </div>
+        <div class="chip chip-high chip-sm"><i></i>high</div>
+        <div class="row-caret"></div>
+      </summary>
+      <div class="row-body">
+        <div class="prose">A tool result landed on exactly 30000 bytes and stopped mid-token, and the agent described it as the complete dependency tree and counted from it. Exactly-round byte counts are the signature of a cap rather than a coincidence, and the shape record carried both that and the ragged ending without the payload being read.</div>
+        <div class="provenance">
+          <div>CLUSTER <span style="color: var(--body-fg)">ceiling-read-as-complete</span></div>
+          <div>FIRST SEEN IN RUN <span style="color: var(--body-fg)">run-20260301T091500Z</span></div>
+        </div>
+
+        
+        <div>
+          <div class="evidence-head">Example sessions</div>
+          <div class="provenance" style="margin-top: 8px">
+            <div>
+              <code>sess-example-0002</code>
+            </div>
+          </div>
+        </div>
+        
+
+        
+        <div class="finding">
+          <div class="finding-head">
+            <h3>A tool result capped at exactly 30000 bytes was read as the complete list</h3>
+            <span class="chip chip-high chip-sm"><i></i>high</span>
+          </div>
+          <div class="finding-body">Event 2 returns exactly 30000 bytes and does not terminate cleanly - the last line stops mid-token. Both facts are in the shape record; neither needs the payload to be read.
+
+At event 3 the agent describes it as &#34;the complete tree&#34; and counts 1400 packages from it. The count is the number of lines that survived the cap, not the number of packages installed. Any package sorting after the cut is invisible to every statement the agent made afterwards.
+
+Exactly-round byte counts are the signature of a ceiling rather than a coincidence, which is why `is_round_number` is a field.</div>
+          <div class="provenance">
+            <div>SESSION <span style="color: var(--body-fg)">sess-example-0002</span></div>
+            <div>CLAUDE-CODE &middot; HARNESS</div>
+            <div>CONFIDENCE <span style="color: var(--body-fg)">0.90</span></div>
+            
+            <div>EVENTS <span style="color: var(--body-fg)">2, 3</span></div>
+            
+          </div>
+          
+          
+            
+            <div class="evidence-head">
+              EVENT 2 &middot; assistant/tool_call &middot; Bash
+            </div>
+            <pre>{&#34;command&#34;: &#34;pip list --format=freeze&#34;}</pre>
+            
+            <div class="evidence-head">
+              EVENT 3 &middot; user/tool_result &middot; Bash
+                &middot; 30,000 BYTES &middot; 4100MS &middot; <span class="warn">ROUND BYTE COUNT</span>
+            </div>
+            <pre>orchard-vendor-pkg-0000==1.0.0
+orchard-vendor-pkg-0001==1.1.1
+orchard-vendor-pkg-0002==1.2.2
+orchard-vendor-pkg-0003==1.3.3
+orchard-vendor-pkg-0004==1.4.4
+orchard-vendor-pkg-0005==1.5.5
+orchard-vendor-pkg-0006==1.6.6
+orchard-vendor-pkg-0007==1.7.0
+orchard-vendor-pkg-0008==1.8.1
+orchard-vendor-pkg-0009==1.9.2
+orchard-vendor-pkg-0010==1.10.3
+orchard-vendor-pkg-0011==1.11.4
+orchard-vendor-pkg-0012==1.12.5
+orchard-vendor-pkg-0013==1.13.6
+orchard-vendor-pkg-0014==1.14.0
+orchard-vendor-pkg-0015==1.15.1
+orchard-vendor-pkg-0016==1.16.2
+orchard-vendor-pkg-0017==1.17.3
+orchard-vendor-pkg-0018==1.18.4
+orchard-vendor-pkg-0019==1.19.5
+orchard-vendor-pkg-0020==1.20.6
+orchard-vendor-pkg-0021==1.21.0
+orchard-vendor-pkg-0022==1.22.1
+orchard-vendor-pkg-0023==1.23.2
+orchard-vendor
+[[ossuary:elided 28841 of 30000 bytes]]
+.1
+orchard-vendor-pkg-0933==1.13.2
+orchard-vendor-pkg-0934==1.14.3
+orchard-vendor-pkg-0935==1.15.4
+orchard-vendor-pkg-0936==1.16.5
+orchard-vendor-pkg-0937==1.17.6
+orchard-vendor-pkg-0938==1.18.0
+orchard-vendor-pkg-0939==1.19.1
+orchard-vendor-pkg-0940==1.20.2
+orchard-vendor-pkg-0941==1.21.3
+orchard-vendor-pkg-0942==1.22.4
+orchard-vendor-pkg-0943==1.23.5
+orchard-vendor-pkg-0944==1.24.6
+</pre>
+            
+          
+        </div>
+        
+      </div>
+    </details>
+    
+    <details class="row" data-sev="low">
+      <summary>
+        <div class="row-n">C-03</div>
+        <div class="row-main">
+          <div class="row-title">Overhead the session paid for with nothing to attribute it to</div>
+          <div class="row-locus">
+            1 SESSION(S) &middot; 2 ISSUE(S) &middot; HARNESS, UNKNOWN &middot; NEW
+          </div>
+        </div>
+        <div class="chip chip-low chip-sm"><i></i>low</div>
+        <div class="row-caret"></div>
+      </summary>
+      <div class="row-body">
+        <div class="prose">An instruction delivered twice at the same timestamp, once as a message and once as IDE selection context, and an 18-second grep returning two lines in a session where reads finish in milliseconds. Neither changed an outcome. Both are costs the transcript records without recording a cause, and the second cannot be separated from a human sitting at a permission prompt.</div>
+        <div class="provenance">
+          <div>CLUSTER <span style="color: var(--body-fg)">unattributed-session-overhead</span></div>
+          <div>FIRST SEEN IN RUN <span style="color: var(--body-fg)">run-20260301T091500Z</span></div>
+        </div>
+
+        
+        <div>
+          <div class="evidence-head">Example sessions</div>
+          <div class="provenance" style="margin-top: 8px">
+            <div>
+              <code>sess-example-0004</code>
+            </div>
+          </div>
+        </div>
+        
+
+        
+        <div class="finding">
+          <div class="finding-head">
+            <h3>The instruction arrived twice, once as a message and once as IDE context</h3>
+            <span class="chip chip-low chip-sm"><i></i>low</span>
+          </div>
+          <div class="finding-body">Events 0 and 1 carry the same brief at the same timestamp, the second wrapped in an `[selected_lines_in_ide]` block. The text is identical.
+
+The model sees one instruction twice with nothing marking them as the same content. Here it cost only tokens. The failure mode worth naming is the one where a duplicated instruction reads as two requests and the second is actioned again.</div>
+          <div class="provenance">
+            <div>SESSION <span style="color: var(--body-fg)">sess-example-0004</span></div>
+            <div>CLAUDE-CODE &middot; HARNESS</div>
+            <div>CONFIDENCE <span style="color: var(--body-fg)">0.85</span></div>
+            
+            <div>EVENTS <span style="color: var(--body-fg)">0, 1</span></div>
+            
+          </div>
+          
+          
+            
+            <div class="evidence-head">
+              EVENT 0 &middot; user/message
+            </div>
+            <pre>Refactor the crate serializers onto the shared base class. Keep the public field names identical - downstream consumers read them by name - and do not change the ordering of the `contents` array.</pre>
+            
+            <div class="evidence-head">
+              EVENT 1 &middot; user/message
+            </div>
+            <pre>[selected_lines_in_ide]
+Refactor the crate serializers onto the shared base class. Keep the public field names identical - downstream consumers read them by name - and do not change the ordering of the `contents` array.</pre>
+            
+          
+        </div>
+        
+        <div class="finding">
+          <div class="finding-head">
+            <h3>A two-line grep took 18 seconds and nothing recorded why</h3>
+            <span class="chip chip-low chip-sm"><i></i>low</span>
+          </div>
+          <div class="finding-body">Event 3 is a grep returning two lines after 18400ms. Read calls in the same session return in tens of milliseconds, so this is not the filesystem.
+
+The duration is derived from the gap between the call and its result, so it includes anything that happened in between - a permission prompt waiting on a human included. A derived duration cannot tell a slow tool from an absent user, and this one does not distinguish them.
+
+What would settle it: whether the harness recorded a permission prompt at this point. Nothing in the transcript does.</div>
+          <div class="provenance">
+            <div>SESSION <span style="color: var(--body-fg)">sess-example-0004</span></div>
+            <div>CLAUDE-CODE &middot; UNKNOWN</div>
+            <div>CONFIDENCE <span style="color: var(--body-fg)">0.40</span></div>
+            
+            <div>EVENTS <span style="color: var(--body-fg)">3</span></div>
+            
+          </div>
+          
+          
+            
+            <div class="evidence-head">
+              EVENT 3 &middot; assistant/tool_call &middot; Bash
+            </div>
+            <pre>{&#34;command&#34;: &#34;grep -rn &#39;class .*Serializer&#39; orchard/&#34;}</pre>
+            
+          
+        </div>
+        
+      </div>
+    </details>
+    
+  </div>
+  
+
+  
+
+  <!-- ================= Where the findings fall ================= -->
+  <div class="sec">
+    <div class="sec-n">05</div>
+    <h2>Where the findings fall</h2>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="label">Issues by phase</div>
+      
+      <div class="meters">
+        
+        <div class="meter">
+          <div class="meter-head">
+            <div>MODEL &middot; 3 ISSUE(S)</div>
+            <b>50%</b>
+          </div>
+          <div class="meter-track"><div class="meter-fill f-high" style="width: 50%"></div></div>
+        </div>
+        
+        <div class="meter">
+          <div class="meter-head">
+            <div>HARNESS &middot; 2 ISSUE(S)</div>
+            <b>33%</b>
+          </div>
+          <div class="meter-track"><div class="meter-fill f-high" style="width: 33%"></div></div>
+        </div>
+        
+        <div class="meter">
+          <div class="meter-head">
+            <div>UNKNOWN &middot; 1 ISSUE(S)</div>
+            <b>17%</b>
+          </div>
+          <div class="meter-track"><div class="meter-fill f-low" style="width: 17%"></div></div>
+        </div>
+        
+      </div>
+      <div class="caption">
+        Phase is the scanner's attribution of where the failure originated, not where it surfaced.
+        Each bar takes the colour of the worst issue filed against that phase.
+      </div>
+      
+    </div>
+
+    <div class="panel">
+      <div class="label">Tool calls</div>
+      
+      <div class="toolrows">
+        
+        <div class="toolrow">
+          <div class="toolrow-name">Bash</div>
+          <div class="toolrow-right">
+            <div class="toolrow-dots">
+              <i class="d-verdigris"></i><i class="d-verdigris"></i><i class="d-verdigris"></i><i class="d-verdigris"></i><i class="d-verdigris"></i><i class="d-verdigris"></i>
+            </div>
+            <div class="toolrow-count">6</div>
+          </div>
+        </div>
+        
+        <div class="toolrow">
+          <div class="toolrow-name">Edit</div>
+          <div class="toolrow-right">
+            <div class="toolrow-dots">
+              <i class="d-verdigris"></i><i class="d-verdigris"></i><i class="d-verdigris"></i>
+            </div>
+            <div class="toolrow-count">3</div>
+          </div>
+        </div>
+        
+        <div class="toolrow">
+          <div class="toolrow-name">Read</div>
+          <div class="toolrow-right">
+            <div class="toolrow-dots">
+              <i class="d-verdigris"></i><i class="d-verdigris"></i><i class="d-verdigris"></i>
+            </div>
+            <div class="toolrow-count">3</div>
+          </div>
+        </div>
+        
+      </div>
+      <div class="caption">
+        Rust marks a result carrying an error, verdigris the rest. One dot is one call;
+        rows marked <span class="approx">~</span> exceed 24 calls and are redrawn proportionally.
+        
+      </div>
+      
+    </div>
+  </div>
+
+  <!-- ================= Tool statistics ================= -->
+  <div class="sec">
+    <div class="sec-n">06</div>
+    <h2>Tool statistics</h2>
+  </div>
+  <div class="prose">
+    Measured across every scanned session. These are the corpus-wide patterns no
+    single-session view can show.
+  </div>
+
+  
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Tool</th>
+          <th class="num">Calls</th>
+          <th class="num">Sessions</th>
+          <th class="num">Errors</th>
+          <th class="num">Empty</th>
+          <th class="num">Round</th>
+          <th class="num">Unclean</th>
+          <th class="num">Dupes</th>
+          <th class="num">p50 B</th>
+          <th class="num">p95 B</th>
+          <th class="num">max B</th>
+          <th class="num">p50 ms</th>
+          <th class="num">p95 ms</th>
+        </tr>
+      </thead>
+      <tbody>
+      
+        <tr>
+          <td style="color: var(--bone)">Bash</td>
+          <td class="num">6</td>
+          <td class="num">5</td>
+          <td class="num ">
+            0 (0.0%)
+          </td>
+          <td class="num">0</td>
+          <td class="num warn">1</td>
+          <td class="num">0</td>
+          <td class="num ">
+            0 (0.0%)
+          </td>
+          <td class="num">51</td>
+          <td class="num">30,000</td>
+          <td class="num">30,000</td>
+          <td class="num">6100</td>
+          <td class="num">33900</td>
+        </tr>
+      
+        <tr>
+          <td style="color: var(--bone)">Edit</td>
+          <td class="num">3</td>
+          <td class="num">3</td>
+          <td class="num ">
+            0 (0.0%)
+          </td>
+          <td class="num">0</td>
+          <td class="num ">0</td>
+          <td class="num">0</td>
+          <td class="num ">
+            0 (0.0%)
+          </td>
+          <td class="num">43</td>
+          <td class="num">45</td>
+          <td class="num">45</td>
+          <td class="num">61</td>
+          <td class="num">74</td>
+        </tr>
+      
+        <tr>
+          <td style="color: var(--bone)">Read</td>
+          <td class="num">3</td>
+          <td class="num">2</td>
+          <td class="num ">
+            0 (0.0%)
+          </td>
+          <td class="num">0</td>
+          <td class="num ">0</td>
+          <td class="num">0</td>
+          <td class="num ">
+            0 (0.0%)
+          </td>
+          <td class="num">49</td>
+          <td class="num">52</td>
+          <td class="num">52</td>
+          <td class="num">19</td>
+          <td class="num">22</td>
+        </tr>
+      
+      </tbody>
+    </table>
+  </div>
+  <div class="caption" style="margin-top: 14px; max-width: 78ch">
+    <b style="color: var(--body-fg); font-weight: 400">Round</b> counts results whose byte length is an exact
+    cap-shaped number. <b style="color: var(--body-fg); font-weight: 400">Unclean</b> counts results that do not
+    end at a plausible boundary. <b style="color: var(--body-fg); font-weight: 400">Dupes</b> counts byte-identical
+    repeated results. All three are measurements, not verdicts.
+  </div>
+  
+
+  <!-- ================= Sessions scanned ================= -->
+  <div class="sec">
+    <div class="sec-n">07</div>
+    <h2>Sessions examined</h2>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Session</th><th>Source</th><th class="num">Issues</th><th>Status</th><th>Path</th></tr>
+      </thead>
+      <tbody>
+      
+        <tr>
+          <td style="color: var(--bone)">sess-example-0001</td>
+          <td>claude-code</td>
+          <td class="num">1</td>
+          <td>ok</td>
+          <td class="inert">/home/dev/.claude/projects/-home-dev-projects-orchard/sess-example-0001.jsonl</td>
+        </tr>
+      
+        <tr>
+          <td style="color: var(--bone)">sess-example-0002</td>
+          <td>claude-code</td>
+          <td class="num">2</td>
+          <td>ok</td>
+          <td class="inert">/home/dev/.claude/projects/-home-dev-projects-orchard/sess-example-0002.jsonl</td>
+        </tr>
+      
+        <tr>
+          <td style="color: var(--bone)">sess-example-0003</td>
+          <td>claude-code</td>
+          <td class="num">1</td>
+          <td>ok</td>
+          <td class="inert">/home/dev/.claude/projects/-home-dev-projects-orchard/sess-example-0003.jsonl</td>
+        </tr>
+      
+        <tr>
+          <td style="color: var(--bone)">sess-example-0004</td>
+          <td>claude-code</td>
+          <td class="num">2</td>
+          <td>ok</td>
+          <td class="inert">/home/dev/.claude/projects/-home-dev-projects-orchard/sess-example-0004.jsonl</td>
+        </tr>
+      
+        <tr>
+          <td style="color: var(--bone)">sess-example-0005</td>
+          <td>claude-code</td>
+          <td class="num">0</td>
+          <td><span class="inert">no findings</span></td>
+          <td class="inert">/home/dev/.claude/projects/-home-dev-projects-orchard/sess-example-0005.jsonl</td>
+        </tr>
+      
+      </tbody>
+    </table>
+  </div>
+
+  <div class="colophon">
+    Excerpts are verbatim from the transcripts. Where this report shortened one it
+    says so inline with an <code>[[ossuary:elided N of M bytes]]</code> marker; an
+    excerpt without that marker ends exactly as it does on disk.
+    
+    Secret-shaped text was masked before any content left the machine.
+    
+  </div>
+
+  <footer>
+    <div>OSSUARY &middot; RUN run-20260301T091500Z</div>
+    <div>INTERRED 2026-07-28 22:10:00 &middot; 5 SESSIONS EXAMINED</div>
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var filter = document.getElementById("sev-filter");
+    if (!filter) return;
+    var rows = Array.prototype.slice.call(
+      document.querySelectorAll("#cluster-rows > details.row")
+    );
+
+    filter.addEventListener("click", function (event) {
+      var button = event.target.closest("button");
+      if (!button) return;
+
+      if (button.id === "expand-all" || button.id === "collapse-all") {
+        var open = button.id === "expand-all";
+        rows.forEach(function (row) {
+          if (row.style.display !== "none") row.open = open;
+        });
+        return;
+      }
+
+      var wanted = button.getAttribute("data-sev");
+      if (!wanted) return;
+      filter.querySelectorAll("button[data-sev]").forEach(function (other) {
+        other.setAttribute("aria-pressed", String(other === button));
+      });
+      rows.forEach(function (row) {
+        var match = wanted === "all" || row.getAttribute("data-sev") === wanted;
+        row.style.display = match ? "" : "none";
+      });
+    });
+  })();
+</script>
+</body>
+</html>

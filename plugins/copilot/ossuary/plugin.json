@@ -1,0 +1,13 @@
+{
+  "name": "ossuary",
+  "description": "Find health issues in local LLM agent session transcripts. Copilot does the investigating; Ossuary supplies the transcripts, the measurements, and the corpus statistics.",
+  "version": "0.1.0",
+  "author": "hosom",
+  "license": "MIT",
+  "keywords": [
+    "transcripts",
+    "observability",
+    "agent-health",
+    "postmortem"
+  ]
+}
