@@ -349,9 +349,12 @@
       </div>
     </div>
     <div class="cell">
-      <div class="cell-label">From cache</div>
-      <div class="cell-value {% if manifest.cached_session_count %}v-verdigris{% endif %}">{{ manifest.cached_session_count | commafy }}</div>
-      <div class="cell-note">sessions unchanged since the last run</div>
+      <div class="cell-label">Investigator</div>
+      <div class="cell-value small">{{ manifest.investigator or "unnamed" }}</div>
+      <div class="cell-note">
+        {%- if manifest.investigator -%}as reported by the agent itself
+        {%- else -%}the agent did not name itself{%- endif -%}
+      </div>
     </div>
     <div class="cell">
       <div class="cell-label">Wall clock</div>
@@ -373,30 +376,10 @@
     </div>
   </div>
 
-  <div class="grid grid-4 attach">
-    <div class="cell">
-      <div class="cell-label">Scanner</div>
-      <div class="cell-value small">{{ manifest.scanner_model or "—" }}</div>
-    </div>
-    <div class="cell">
-      <div class="cell-label">Clusterer</div>
-      <div class="cell-value small">{{ manifest.clusterer_model or "—" }}</div>
-    </div>
-    <div class="cell">
-      <div class="cell-label">Prompt version</div>
-      <div class="cell-value small">{{ manifest.prompt_version or "—" }}</div>
-    </div>
-    <div class="cell">
-      <div class="cell-label">Schema</div>
-      <div class="cell-value small">v{{ manifest.schema_version }}</div>
-    </div>
-  </div>
-
-  {% if failed_scans or capped_scans or manifest.errors %}
+  {% if failed_scans or manifest.errors %}
   <div class="note">
     <div class="label" style="color: var(--brass-fg)">Run caveats</div>
     <div class="caption">
-      {% if capped_scans %}{{ capped_scans | length }} session(s) hit the turn cap, so their findings are partial.{% endif %}
       {% if failed_scans %}{{ failed_scans | length }} session(s) errored during scanning and contributed nothing.{% endif %}
     </div>
     {% if manifest.errors %}<ul>{% for e in manifest.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
@@ -743,13 +726,13 @@
   <!-- ================= Sessions scanned ================= -->
   <div class="sec">{% set ns.section = ns.section + 1 %}
     <div class="sec-n">{{ "%02d" | format(ns.section) }}</div>
-    <h2>Sessions scanned</h2>
+    <h2>Sessions examined</h2>
   </div>
 
   <div class="table-scroll">
     <table>
       <thead>
-        <tr><th>Session</th><th>Source</th><th class="num">Issues</th><th class="num">Turns</th><th>Status</th><th>Path</th></tr>
+        <tr><th>Session</th><th>Source</th><th class="num">Issues</th><th>Status</th><th>Path</th></tr>
       </thead>
       <tbody>
       {% for scan in manifest.scans %}
@@ -757,12 +740,10 @@
           <td style="color: var(--bone)">{{ scan.session_id }}</td>
           <td>{{ scan.source }}</td>
           <td class="num">{{ scan.issues | length }}</td>
-          <td class="num">{{ scan.turns_used }}</td>
           <td>
             {%- if scan.error %}<span class="bad">error</span>
-            {%- elif scan.hit_turn_cap %}<span class="warn">turn cap</span>
-            {%- elif scan.from_cache %}<span class="inert">cached</span>
-            {%- else %}ok{% endif -%}
+            {%- elif scan.issues %}ok
+            {%- else %}<span class="inert">no findings</span>{% endif -%}
           </td>
           <td class="inert">{{ scan.path }}</td>
         </tr>

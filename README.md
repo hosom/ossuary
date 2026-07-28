@@ -25,57 +25,67 @@ discover sessions
       ↓
 adapters → normalized events (+ shape records)   [deterministic]
       ↓
-Agent A, once per session, tool-using loop        [LLM]
+outline, corpus-wide tool stats, redaction        [deterministic]
       ↓
-issues (per session)  +  corpus-wide tool stats   [deterministic aggregate]
+── MCP ───────────────────────────────────────────────────────
       ↓
-Agent B, batched over all issues                  [LLM]
+your agent reads, notices, records                [Claude Code / Copilot CLI]
       ↓
-clusters (reconciled against stored taxonomy)
+── MCP ───────────────────────────────────────────────────────
+      ↓
+issues + clusters, reconciled against the taxonomy
       ↓
 Jinja2 → single-file HTML → open browser
 ```
 
+Ossuary supplies everything above and below the line. The reasoning in the
+middle is done by the coding agent you already have open, under whatever
+credentials it already holds.
+
 ## Install
 
 ```bash
-uv venv && uv pip install -e '.[claude-code]'
+uv venv && uv pip install -e .
 ```
 
-**No Anthropic API key required.** The default config runs inference through the
-Claude Agent SDK, which uses whatever `claude` is already logged in as —
-including a Pro or Max subscription. `.[copilot]` does the same through the
-GitHub Copilot SDK and a Copilot subscription. `ossuary backends` reports what
-is installed and what each one authenticates as. See
-[docs/backends.md](docs/backends.md) for the full picture, including the API-key
-and fully-local paths.
+Then install the plugin for whichever agent you use:
 
-There is also a plugin for [Claude Code and Copilot CLI](docs/plugins.md) that
-inverts the arrangement: Ossuary exposes the transcripts over MCP and the agent
-you are already talking to does the investigating.
+```
+/plugin marketplace add hosom/ossuary          # Claude Code
+/plugin install ossuary@ossuary
+```
+
+```bash
+copilot plugin install --path ./plugins/copilot/ossuary    # Copilot CLI
+```
+
+**There is no API key to set.** Ossuary runs no inference of its own — it hands
+your transcripts to the agent you are already talking to, which is already
+authenticated. See [docs/plugins.md](docs/plugins.md).
 
 ## Use
 
+Ask your agent to look at your sessions:
+
+> *Have a look at my recent Claude Code sessions and tell me what went wrong.*
+
+It reads the outline, follows what looks odd, checks the corpus statistics
+before calling anything abnormal, and records what it finds. When you want the
+findings written down it calls `ossuary_write_run`, and then:
+
 ```bash
-ossuary sources                  # what it found on disk, counts per source
-ossuary backends                 # which inference backends are installed
-ossuary scan                     # expensive; writes artifacts to .ossuary/
-ossuary report                   # cheap; renders HTML from artifacts
+ossuary report                   # renders .ossuary/run.json to a single HTML file
 ```
 
-`scan` and `report` are separate on purpose. The report will be iterated on
-dozens of times and must not re-pay for inference each round.
+The CLI is the deterministic surface around that — nothing here calls a model:
 
 ```bash
-ossuary scan [PATHS...] [--source claude-code|codex|copilot] [--model ...]
-             [--limit N] [--no-cache] [--no-redact] [--no-cluster]
+ossuary sources [PATHS...] [--source claude-code|codex|copilot]
+ossuary outline <session-id|path>          # one session, by hand
 ossuary report [--open/--no-open] [--out report.html]
-ossuary agents test scanner --fixture tests/golden/     # add --live to call the model
-ossuary agents show
-ossuary backends                                        # installed backends and what they authenticate as
-ossuary outline <session-id|path>                       # deterministic, no model
 ossuary taxonomy [--show/--clear]
 ossuary export --out issues.jsonl
+ossuary-mcp                                # the MCP server, for wiring up by hand
 ```
 
 ## Design decisions worth not undoing
@@ -84,9 +94,9 @@ ossuary export --out issues.jsonl
 detectors that look for tracebacks or known failure strings and call those
 "issues". A deterministic detector can only find what its author already knew
 about, which makes the tool a fancy grep. Deterministic code here *measures and
-indexes*; the agent *interprets*. Agent A is given no taxonomy of issue types
-for the same reason — a menu of expected failure modes turns discovery into
-recognition.
+indexes*; the agent *interprets*. The investigating agent is given no taxonomy
+of issue types for the same reason — a menu of expected failure modes turns
+discovery into recognition.
 
 **Nothing is truncated silently.** Every path that shortens a payload routes
 through `elide.py` and inserts `[[ossuary:elided N of M bytes]]`. The invariant
@@ -95,29 +105,31 @@ way on disk*. Unlabelled truncation would manufacture the exact artifact the
 tool exists to detect. This is a correctness requirement, and
 `tests/test_elide.py` treats it as one.
 
-**Agent A always gets the full outline first.** It navigates from there with
+**The outline comes before anything else.** The agent navigates from there with
 tools, but it has seen every event at low resolution before it chooses where to
-look. Recall does not depend on the model's curiosity, and runs are reproducible
-enough to diff week over week. The outline is also where most anomalies actually
-surface — as rows rather than as text buried in a payload.
+look. Recall does not depend on the model's curiosity. The outline is also where
+most anomalies actually surface — as rows rather than as text buried in a
+payload — which is why the plugin prompts insist on reading it in full first.
 
 **Adapters parse like archaeologists, not validators.** No line is ever rejected.
 A malformed line becomes a degraded event carrying its raw text and the parse
 error, and parsing continues. Whatever is on disk is the only record that will
 ever exist of that session. See [`docs/formats.md`](docs/formats.md).
 
-**Prompts live in config, tools live in code.** Model, temperature, turn cap, and
-prompt text are in `agents.yaml`; tool implementations and schemas are in Python.
-The prompt's content hash is a cache key, so editing a prompt re-runs inference
-without re-paying for I/O.
+**Ossuary does not bring its own model.** The hard part here was never calling
+one: it was turning four incompatible transcript formats into a single event
+model, measuring payloads without editorialising, computing the corpus-wide
+statistics no single session can show, and never shortening anything without
+saying so. A coding agent already has a model, a context window and a turn loop.
+It needs the transcripts laid out properly, not a second agent bolted on beside
+it. So the whole inference layer is somebody else's — which is also why there is
+no API key, no provider SDK, and no question about whose subscription is being
+spent. See [`docs/plugins.md`](docs/plugins.md).
 
-**Who runs the inference is a deployment question, not an agent one.** The
-prompts and the tool surface are described once and are byte-identical across
-every backend, so a finding produced under a Claude Max subscription and the same
-finding produced against an API key differ only in who did the reasoning. See
-[`docs/backends.md`](docs/backends.md). The [plugin](docs/plugins.md) inverts the
-arrangement entirely — Ossuary serves the transcripts over MCP and the agent you
-are already talking to investigates.
+**The method lives in the plugin prompts, not in Python.** What to look for, how
+to read the instrumentation, and what counts as an issue are in `SKILL.md` and
+`*.agent.md`, where they are readable and editable by the person running the
+investigation. Nothing in the code decides what a problem looks like.
 
 ## Shape records
 
@@ -139,42 +151,23 @@ as those three fields side by side.
 
 Corpus-wide statistics do the part no single session can: a tool that returns
 exactly 30000 bytes on 40% of calls is unremarkable once and damning across two
-hundred sessions. Agent A structurally cannot see that; Agent B is handed it.
+hundred sessions. Nothing inside one session shows it, so `ossuary_tool_stats`
+computes it across the corpus and hands it over on request.
 
 ## Privacy
 
 Transcripts contain source code, file contents, and not infrequently credentials.
-A redaction pass runs **before any API call** — common secret shapes, key-shaped
-strings, and the literal values of your own credential-ish environment variables.
-Placeholders are padded toward the original length so shape records stay honest.
+A redaction pass runs **before anything leaves the MCP boundary** — common secret
+shapes, key-shaped strings, and the literal values of your own credential-ish
+environment variables. Placeholders are padded toward the original length so
+shape records stay honest.
 
-`--no-redact` disables it and warns loudly.
+The host agent is a model too, and is treated as one. `OSSUARY_NO_REDACT`
+disables the pass, and then transcripts reach it verbatim.
 
-A fully local configuration works today, not eventually:
-
-```yaml
-agents:
-  scanner:
-    model: ollama:qwen2.5-coder
-```
-
-`OLLAMA_BASE_URL` overrides the default `http://localhost:11434/v1`. For any
-other provider, point `openai-compatible:<model>` at a proxy via
-`OSSUARY_OPENAI_BASE_URL`.
-
-The subscription backends and the MCP server redact on exactly the same path.
-The host agent behind a plugin is a model too, and is treated as one.
-
-## Caching
-
-Content-addressed under `.ossuary/cache/`:
-
-- tool responses — `hash(session_file_content) + hash(call_args)`
-- issue lists — `hash(session_file_content) + prompt_version + model + source`
-
-A prompt edit re-runs inference but not I/O. An unchanged session costs nothing
-on re-scan. Keying on file *content* rather than mtime means a touched-but-
-unmodified transcript stays cached.
+Nothing else leaves the machine: Ossuary opens no sockets and makes no API
+calls. Whatever the transcripts are shown to is whatever you have already
+chosen to run.
 
 ## Taxonomy
 
@@ -189,7 +182,7 @@ rather than an artifact of the model choosing different words.
 CDN links, no network — so it survives being attached to a ticket. Sections:
 run summary, corpus trace, new issue types this run, clusters (severity-filtered,
 expandable to member issues and verbatim evidence), distribution by phase and
-tool, full tool statistics, and every session scanned.
+tool, full tool statistics, and every session examined.
 
 ### Brand
 
@@ -237,6 +230,6 @@ bytes, and an empty result with a 30-second duration.
 
 ## Not in v1
 
-No regex/heuristic issue detectors. No embeddings or vector store. No semantic
-pre-batching for Agent B. No web service, daemon, or TUI. No database — JSON and
-JSONL on disk are sufficient at this scale. No agents beyond the two described.
+No regex/heuristic issue detectors. No embeddings or vector store. No web
+service, daemon, or TUI. No database — JSON and JSONL on disk are sufficient at
+this scale. No model SDK, no API client, and no inference of Ossuary's own.

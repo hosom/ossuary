@@ -1,22 +1,13 @@
-"""Aggregates, the agents wired to a stub model, and the report."""
+"""Corpus aggregates and the HTML report."""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pathlib import Path
-
-import pytest
-from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
-from pydantic_ai.models.function import FunctionModel
 
 from ossuary.aggregate import compute_tool_stats, render_tool_stats
-from ossuary.cache import Cache
-from ossuary.config import load_config
 from ossuary.models import RunManifest, Session, SessionScan, StoredIssue
 from ossuary.pipeline import issue_id_for, unclustered_issues
 from ossuary.report import build_context, render_html
-
-CONFIG = load_config(Path(__file__).parent.parent / "agents.yaml")
 
 
 class TestAggregates:
@@ -53,160 +44,6 @@ class TestAggregates:
         assert "No tool results" in render_tool_stats([])
 
 
-class TestScannerAgent:
-    """Agent A through the backend seam, driven by a scripted model.
-
-    The Pydantic AI backend is the one that can be exercised without a
-    credential, so it stands in for all three. What is being tested here is the
-    tool wiring and the deps that every backend shares, not Pydantic AI itself.
-    """
-
-    def _backend(self, script, **overrides):
-        from ossuary.backends import BackendConfig
-        from ossuary.backends.pydantic_ai_backend import PydanticAIBackend
-
-        config = BackendConfig(
-            model="stub",
-            max_turns=overrides.pop("max_turns", CONFIG.scanner.max_turns),
-            extra={"model_object": FunctionModel(script)},
-            **overrides,
-        )
-        return PydanticAIBackend(config)
-
-    def _run(self, store, session, script, **overrides):
-        from ossuary.agents.deps import ScannerDeps
-        from ossuary.agents.scanner import scanner_prompt
-        from ossuary.agents.tools import scanner_tools
-
-        deps = ScannerDeps(
-            store=store,
-            session_id=session.session_id,
-            session_content_hash=session.content_hash,
-            tool_stats=compute_tool_stats([session]),
-        )
-        result = self._backend(script, **overrides).run(
-            instructions=CONFIG.scanner.prompt,
-            prompt=scanner_prompt(store.outline(session.session_id)),
-            tools=scanner_tools(deps),
-        )
-        return deps, result
-
-    def test_tools_are_callable_and_issues_are_collected(self, loaded_store, claude_session):
-        def script(messages, info):
-            n = len([m for m in messages if m.kind == "response"])
-            if n == 0:
-                return ModelResponse(parts=[ToolCallPart("read_events", {"start": 0, "end": 4})])
-            if n == 1:
-                return ModelResponse(parts=[ToolCallPart("search_session", {"pattern": "commit"})])
-            if n == 2:
-                return ModelResponse(parts=[ToolCallPart("tool_stats", {"tool_name": "Bash"})])
-            if n == 3:
-                return ModelResponse(parts=[ToolCallPart("report_issue", {
-                    "title": "Bash output capped at 30000 bytes",
-                    "description": "Cut mid-line with exit code 0 and no indication.",
-                    "severity": "high", "phase": "harness",
-                    "evidence_event_indices": [5, 5, 4], "confidence": 0.9})])
-            return ModelResponse(parts=[TextPart("done")])
-
-        deps, result = self._run(loaded_store, claude_session, script)
-        assert len(deps.collected) == 1
-        issue = deps.collected[0]
-        assert issue.severity == "high" and issue.phase == "harness"
-        assert issue.evidence_event_indices == [4, 5], "deduped and sorted"
-        assert result.text == "done"
-        assert not result.hit_turn_cap
-
-    def test_all_five_tools_are_registered(self, loaded_store, claude_session):
-        seen = []
-
-        def script(messages, info):
-            if not seen:
-                seen.extend(t.name for t in info.function_tools)
-            return ModelResponse(parts=[TextPart("done")])
-
-        self._run(loaded_store, claude_session, script)
-        assert set(seen) == {
-            "read_events", "search_session", "read_event_slice", "tool_stats", "report_issue",
-        }
-
-    def test_confidence_is_clamped(self, loaded_store, claude_session):
-        def script(messages, info):
-            n = len([m for m in messages if m.kind == "response"])
-            if n == 0:
-                return ModelResponse(parts=[ToolCallPart("report_issue", {
-                    "title": "t", "description": "d", "severity": "low", "phase": "tool",
-                    "evidence_event_indices": [], "confidence": 4.2})])
-            return ModelResponse(parts=[TextPart("done")])
-
-        deps, _ = self._run(loaded_store, claude_session, script)
-        assert deps.collected[0].confidence == 1.0
-
-    def test_read_events_span_is_capped_with_a_marker(self, loaded_store, claude_session):
-        """An oversized span must say what it withheld, never silently shorten."""
-        captured = {}
-
-        def script(messages, info):
-            n = len([m for m in messages if m.kind == "response"])
-            if n == 0:
-                return ModelResponse(parts=[ToolCallPart("read_events", {"start": 0, "end": 500})])
-            captured["reply"] = messages[-1].parts[0].content
-            return ModelResponse(parts=[TextPart("done")])
-
-        self._run(loaded_store, claude_session, script)
-        assert "ossuary:elided" in captured["reply"]
-        assert "read_events again" in captured["reply"]
-
-    def test_a_failing_tool_returns_a_marked_result_instead_of_raising(
-        self, loaded_store, claude_session
-    ):
-        """A malformed tool call is a tool result, not a dead scan.
-
-        Backends disagree about what a raised exception means -- retry, abort,
-        swallow -- and that disagreement would otherwise show up as different
-        findings from the same transcript.
-        """
-        captured = {}
-
-        def script(messages, info):
-            n = len([m for m in messages if m.kind == "response"])
-            if n == 0:
-                return ModelResponse(parts=[ToolCallPart("tool_stats", {})])
-            captured["reply"] = messages[-1].parts[0].content
-            return ModelResponse(parts=[TextPart("done")])
-
-        _, result = self._run(loaded_store, claude_session, script)
-        assert "ossuary:tool-error" in captured["reply"]
-        assert "tool_stats" in captured["reply"]
-        assert result.text == "done", "the run continues past a tool failure"
-
-    def test_partial_results_survive_a_turn_cap(self, loaded_store, claude_session):
-        """Incremental reporting is what makes a cutoff yield partial results."""
-        def script(messages, info):
-            n = len([m for m in messages if m.kind == "response"])
-            return ModelResponse(parts=[ToolCallPart("report_issue", {
-                "title": f"issue {n}", "description": "d", "severity": "low",
-                "phase": "tool", "evidence_event_indices": [0], "confidence": 0.5})])
-
-        deps, result = self._run(loaded_store, claude_session, script, max_turns=3)
-        assert result.hit_turn_cap, "a cap hit is an outcome, not an exception"
-        assert len(deps.collected) >= 2, "work done before the cap must not be lost"
-
-    def test_tool_responses_are_cached_by_file_content(self, loaded_store, claude_session, tmp_path):
-        from ossuary.agents.deps import ScannerDeps
-
-        cache = Cache(tmp_path)
-        deps = ScannerDeps(
-            store=loaded_store, session_id=claude_session.session_id,
-            session_content_hash=claude_session.content_hash, tool_stats=[], cache=cache,
-        )
-        first = deps.cached_or("read_events", {"start": 0, "end": 2},
-                               lambda: loaded_store.read_events(claude_session.session_id, 0, 2))
-        assert cache.writes == 1
-        second = deps.cached_or("read_events", {"start": 0, "end": 2},
-                                lambda: pytest.fail("should not recompute"))
-        assert second == first and cache.hits == 1
-
-
 class TestReport:
     def _manifest(self, claude_session: Session) -> RunManifest:
         from ossuary.models import Cluster
@@ -224,14 +61,13 @@ class TestReport:
         return RunManifest(
             run_id="run-test", started_at=datetime.now(timezone.utc),
             finished_at=datetime.now(timezone.utc),
-            scanner_model="anthropic:claude-haiku-4-5",
-            clusterer_model="anthropic:claude-sonnet-5",
+            investigator="claude-code / opus",
             session_count=1, event_count=len(claude_session.events), issue_count=1,
             sources={"claude-code": 1},
             scans=[SessionScan(
                 session_id=claude_session.session_id, source="claude-code",
                 path=claude_session.path, content_hash=claude_session.content_hash,
-                issues=[issue], turns_used=6,
+                issues=[issue],
             )],
             tool_stats=compute_tool_stats([claude_session]),
             clusters=[Cluster(
@@ -254,7 +90,7 @@ class TestReport:
     def test_shows_the_key_sections(self, claude_session, loaded_store):
         html = render_html(self._manifest(claude_session), loaded_store)
         for section in ("Run summary", "New issue types this run", "Clusters",
-                        "Tool statistics", "Sessions scanned"):
+                        "Tool statistics", "Sessions examined"):
             assert section in html
 
     def test_evidence_excerpts_are_included_and_marked(self, claude_session, loaded_store):

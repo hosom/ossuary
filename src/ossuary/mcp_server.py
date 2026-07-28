@@ -33,8 +33,7 @@ from typing import Any
 
 from .adapters import ALL_SOURCES
 from .aggregate import compute_tool_stats, corpus_event_count, render_tool_stats
-from .agents.clusterer import ProposedCluster
-from .models import Issue, RunManifest, SessionScan, StoredIssue, ToolStats
+from .models import Issue, ProposedCluster, RunManifest, SessionScan, StoredIssue, ToolStats
 from .pipeline import artifact_dir, corpus_summary, issue_id_for, make_run_id, write_manifest
 from .redact import Redactor
 from .store import DEFAULT_EVENT_BUDGET, SessionStore
@@ -293,11 +292,15 @@ def build_server(roots: list[Path] | None = None, *, redact: bool = True) -> Any
         return "\n".join(lines)
 
     @mcp.tool()
-    def ossuary_write_run() -> str:
+    def ossuary_write_run(investigator: str = "") -> str:
         """Write everything recorded so far to `.ossuary/`, for `ossuary report`.
 
         Call this once, at the end. Nothing is persisted before it, so an
         abandoned exploration leaves no artifacts behind.
+
+        `investigator` is how you want to be named in the report -- your harness
+        and model, if you know them. Ossuary cannot see which model is on the
+        other end of these tools, so it records what you say or nothing at all.
         """
         state.ensure_loaded()
         run = state.run
@@ -319,8 +322,7 @@ def build_server(roots: list[Path] | None = None, *, redact: bool = True) -> Any
             run_id=run.run_id,
             started_at=run.started_at,
             finished_at=datetime.now(timezone.utc),
-            scanner_model=f"mcp:{SERVER_NAME}",
-            clusterer_model=f"mcp:{SERVER_NAME}",
+            investigator=investigator.strip(),
             redaction_enabled=state.redact,
             session_count=len(sessions),
             event_count=corpus_event_count(sessions),

@@ -1,47 +1,36 @@
-"""Ossuary CLI.
+"""Ossuary CLI -- the deterministic surface.
 
-`scan` is expensive and writes artifacts to `.ossuary/`. `report` is cheap, reads
-those artifacts, and renders HTML. They are deliberately separate commands: the
-report design gets iterated on dozens of times and must never re-pay for
-inference to do it.
+Nothing here calls a model. Investigation happens through the MCP server
+(`ossuary-mcp`), driven by whichever agent you are already talking to; these
+commands are what you reach for around it: see what is on disk, read a session
+outline by hand, render the report, inspect the taxonomy, export the findings.
 """
 
 from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 import typer
 
 from .adapters import ALL_SOURCES
-from .aggregate import compute_tool_stats, corpus_event_count, render_tool_stats
-from .cache import Cache
-from .config import find_config, load_config
-from .models import RunManifest
-from .pipeline import (
-    artifact_dir,
-    cluster_issues,
-    corpus_summary,
-    make_run_id,
-    read_manifest,
-    scan_session,
-    write_manifest,
-)
-from .redact import Redactor
+from .pipeline import artifact_dir, read_manifest
 from .report import write_report
 from .store import SessionStore
 from .taxonomy import TAXONOMY_FILENAME, Taxonomy
 
 app = typer.Typer(
     name="ossuary",
-    help="Find health issues in local LLM agent session transcripts.",
+    help=(
+        "Find health issues in local LLM agent session transcripts. "
+        "Investigation runs through the Ossuary plugin for Claude Code or "
+        "Copilot CLI; these commands are the deterministic surface around it."
+    ),
     no_args_is_help=True,
     add_completion=False,
 )
-agents_app = typer.Typer(help="Inspect and test the configured agents.", no_args_is_help=True)
-app.add_typer(agents_app, name="agents")
 
 
 def _echo(message: str = "") -> None:
@@ -51,25 +40,6 @@ def _echo(message: str = "") -> None:
 def _fail(message: str) -> None:
     typer.secho(f"error: {message}", fg=typer.colors.RED, err=True)
     raise typer.Exit(code=1)
-
-
-def _require_backends(config, cluster: bool) -> None:  # type: ignore[no-untyped-def]
-    """Fail fast when a configured backend's SDK is not installed."""
-    import importlib.util
-
-    from .backends import split_spec
-
-    needed = {"claude-code": "claude_agent_sdk", "copilot": "copilot"}
-    wanted = [config.scanner.model] + ([config.clusterer.model] if cluster else [])
-    for spec in wanted:
-        name, _ = split_spec(spec)
-        module = needed.get(name)
-        if module and importlib.util.find_spec(module) is None:
-            _fail(
-                f"model {spec!r} needs the {name} backend, which is not installed. "
-                f"Install it with: pip install 'ossuary[{name}]'\n"
-                f"       Run `ossuary backends` to see the alternatives."
-            )
 
 
 @app.command()
@@ -121,218 +91,13 @@ def sources(
 
 
 @app.command()
-def scan(
-    paths: list[Path] = typer.Argument(None, help="Optional explicit paths to scan."),
-    source: str | None = typer.Option(
-        None, "--source", help=f"Limit to one source: {', '.join(ALL_SOURCES)}"
-    ),
-    model: str | None = typer.Option(
-        None,
-        "--model",
-        help=(
-            "Override the scanner model from agents.yaml, e.g. claude-code:haiku, "
-            "copilot:gpt-5, anthropic:claude-haiku-4-5. See `ossuary backends`."
-        ),
-    ),
-    limit: int | None = typer.Option(None, "--limit", help="Scan at most N sessions."),
-    no_cache: bool = typer.Option(False, "--no-cache", help="Ignore and overwrite the cache."),
-    no_redact: bool = typer.Option(
-        False,
-        "--no-redact",
-        help="Disable redaction. Transcripts will be sent to the model verbatim.",
-    ),
-    no_cluster: bool = typer.Option(
-        False, "--no-cluster", help="Skip Agent B; scan sessions only."
-    ),
-    config_path: Path | None = typer.Option(None, "--config", help="Path to agents.yaml."),
-) -> None:
-    """Scan sessions, find issues, cluster them, and write artifacts to .ossuary/."""
-    try:
-        config = load_config(config_path)
-    except (FileNotFoundError, ValueError) as exc:
-        _fail(str(exc))
-        return
-
-    if model:
-        config.agents["scanner"] = config.scanner.model_copy(update={"model": model})
-
-    wanted = [source] if source else list(ALL_SOURCES)
-    for name in wanted:
-        if name not in ALL_SOURCES:
-            _fail(f"unknown source {name!r}; expected one of {', '.join(ALL_SOURCES)}")
-
-    if no_redact:
-        typer.secho(
-            "warning: redaction disabled; transcript content will be sent to the "
-            "model verbatim, including any credentials it contains.",
-            fg=typer.colors.YELLOW,
-            err=True,
-        )
-
-    # A missing SDK should cost one line, not one traceback per session. Check it
-    # before parsing anything, since parsing a large corpus is not free.
-    _require_backends(config, cluster=not no_cluster)
-
-    redactor = Redactor(enabled=not no_redact)
-    roots = [Path(p) for p in paths] if paths else None
-    store = SessionStore(redactor=redactor, roots=roots)
-
-    refs = store.discover(wanted, roots=roots)
-    if not refs:
-        _fail("no sessions found. Run `ossuary sources` to see where Ossuary looked.")
-        return
-
-    refs.sort(key=lambda r: r.mtime or datetime.min, reverse=True)
-    if limit:
-        refs = refs[:limit]
-
-    base = Path.cwd()
-    cache = Cache(artifact_dir(base), enabled=not no_cache)
-    run_id = make_run_id()
-    started = datetime.now(timezone.utc)
-
-    _echo(f"Parsing {len(refs)} session(s)...")
-    sessions = []
-    errors: list[str] = []
-    for ref in refs:
-        try:
-            sessions.append(store.load(ref))
-        except Exception as exc:  # noqa: BLE001 - one bad file must not end the run
-            errors.append(f"failed to parse {ref.path}: {type(exc).__name__}: {exc}")
-
-    if not sessions:
-        _fail("no sessions could be parsed.")
-        return
-
-    degraded = sum(s.parse_error_count for s in sessions)
-    _echo(
-        f"Parsed {len(sessions)} session(s), {corpus_event_count(sessions):,} events"
-        + (f", {degraded} degraded line(s)." if degraded else ".")
-    )
-
-    # Computed before scanning so Agent A's `tool_stats` tool can answer
-    # corpus-wide questions from turn one.
-    tool_stats = compute_tool_stats(sessions)
-
-    _echo(f"Scanning with {config.scanner.model} (max {config.scanner.max_turns} turns/session)...")
-    scans = []
-    with typer.progressbar(sessions, label="  sessions") as progress:
-        for session in progress:
-            scan_result = scan_session(
-                session,
-                store=store,
-                config=config,
-                cache=cache,
-                tool_stats=tool_stats,
-                redacted=not no_redact,
-            )
-            scans.append(scan_result)
-            if scan_result.error:
-                errors.append(f"{session.session_id}: {scan_result.error}")
-
-    issues = [issue for scan_result in scans for issue in scan_result.issues]
-    cached_count = sum(1 for s in scans if s.from_cache)
-    _echo(
-        f"Found {len(issues)} issue(s) across {len(scans)} session(s) "
-        f"({cached_count} served from cache)."
-    )
-
-    taxonomy = Taxonomy(artifact_dir(base) / TAXONOMY_FILENAME)
-    clusters = []
-    if issues and not no_cluster:
-        _echo(f"Clustering with {config.clusterer.model}...")
-        clusters, cluster_error = cluster_issues(
-            issues, tool_stats, config=config, taxonomy=taxonomy, run_id=run_id
-        )
-        if cluster_error:
-            errors.append(cluster_error)
-            typer.secho(f"warning: {cluster_error}", fg=typer.colors.YELLOW, err=True)
-        taxonomy.update(clusters, run_id=run_id)
-        taxonomy.save()
-        new_count = sum(1 for c in clusters if c.is_new_this_run)
-        _echo(f"Produced {len(clusters)} cluster(s), {new_count} new this run.")
-    elif no_cluster:
-        _echo("Skipping clustering (--no-cluster).")
-
-    manifest = RunManifest(
-        run_id=run_id,
-        started_at=started,
-        finished_at=datetime.now(timezone.utc),
-        scanner_model=config.scanner.model,
-        clusterer_model=config.clusterer.model,
-        prompt_version=config.scanner.prompt_version,
-        redaction_enabled=not no_redact,
-        session_count=len(sessions),
-        event_count=corpus_event_count(sessions),
-        issue_count=len(issues),
-        cached_session_count=cached_count,
-        sources=corpus_summary(sessions),
-        scans=scans,
-        tool_stats=tool_stats,
-        clusters=clusters,
-        errors=errors,
-    )
-    path = write_manifest(manifest, base)
-    _echo(f"Wrote {path}")
-    _echo("Run `ossuary report` to render the HTML report.")
-
-
-@app.command()
-def backends() -> None:
-    """Show which inference backends are installed and what each one authenticates as."""
-    import importlib.util
-    import os
-
-    rows = [
-        (
-            "claude-code",
-            "claude_agent_sdk",
-            "ossuary[claude-code]",
-            "Claude Agent SDK -- whatever `claude` is logged in as, "
-            "including a Pro or Max subscription. No Anthropic API key needed.",
-        ),
-        (
-            "copilot",
-            "copilot",
-            "ossuary[copilot]",
-            "GitHub Copilot SDK -- whatever `gh` is logged in as, "
-            "including a Copilot subscription. No Anthropic API key needed.",
-        ),
-        (
-            "pydantic-ai",
-            "pydantic_ai",
-            "ossuary",
-            "A hosted provider API key (ANTHROPIC_API_KEY and friends), "
-            "or a local endpoint via `ollama:` / `openai-compatible:`.",
-        ),
-    ]
-
-    for name, module, extra, note in rows:
-        installed = importlib.util.find_spec(module) is not None
-        marker = "installed" if installed else f"not installed  (pip install '{extra}')"
-        _echo(f"{name}: {marker}")
-        for line in note.split(". "):
-            if line.strip():
-                _echo(f"    {line.strip().rstrip('.')}.")
-        _echo()
-
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    _echo(f"ANTHROPIC_API_KEY: {'set' if key else 'not set'}")
-    if not key:
-        _echo(
-            "  Without one, set `model: claude-code:...` or `model: copilot:...` "
-            "in agents.yaml. Run `ossuary agents show` to see what is configured."
-        )
-
-
-@app.command()
 def report(
     out: Path = typer.Option(Path("report.html"), "--out", help="Output HTML file."),
     open_browser: bool = typer.Option(
         True, "--open/--no-open", help="Open the report in a browser when done."
     ),
 ) -> None:
-    """Render the HTML report from artifacts written by `scan`. Runs no inference."""
+    """Render the HTML report from artifacts an investigation wrote. Runs no inference."""
     base = Path.cwd()
     try:
         manifest = read_manifest(base)
@@ -373,126 +138,6 @@ def report(
 
     path = write_report(manifest, out, store=store, open_browser=open_browser)
     _echo(f"Wrote {path.resolve()}")
-
-
-@agents_app.command("test")
-def agents_test(
-    name: str = typer.Argument(..., help="Agent to test: scanner or clusterer."),
-    fixture: Path = typer.Option(..., "--fixture", help="Directory of fixture sessions."),
-    config_path: Path | None = typer.Option(None, "--config", help="Path to agents.yaml."),
-    live: bool = typer.Option(
-        False, "--live", help="Call the real model. Without this, only the prompt assembly is checked."
-    ),
-) -> None:
-    """Exercise an agent against fixture sessions.
-
-    Without `--live` this validates config, parsing, and prompt assembly without
-    spending anything -- which is what you want when iterating on a prompt.
-    """
-    try:
-        config = load_config(config_path)
-    except (FileNotFoundError, ValueError) as exc:
-        _fail(str(exc))
-        return
-
-    if name not in config.agents:
-        _fail(f"unknown agent {name!r}; agents.yaml defines: {', '.join(sorted(config.agents))}")
-        return
-
-    agent_config = config.agents[name]
-    if not fixture.exists():
-        _fail(f"fixture path not found: {fixture}")
-        return
-
-    _echo(f"agent: {name}")
-    _echo(f"  model: {agent_config.model}")
-    _echo(f"  temperature: {agent_config.temperature}")
-    _echo(f"  max_turns: {agent_config.max_turns}")
-    _echo(f"  prompt_version: {agent_config.prompt_version}")
-    _echo(f"  prompt: {len(agent_config.prompt)} chars")
-    _echo()
-
-    store = SessionStore()
-    refs = store.discover(list(ALL_SOURCES), roots=[fixture])
-    if not refs:
-        _fail(f"no session files found under {fixture}")
-        return
-
-    _echo(f"fixtures: {len(refs)} session(s) under {fixture}")
-    sessions = [store.load(ref) for ref in refs]
-    stats = compute_tool_stats(sessions)
-
-    for session in sessions:
-        outline = store.outline(session.session_id)
-        degraded = session.parse_error_count
-        _echo(
-            f"  {session.session_id}: {len(session.events)} events, "
-            f"outline {len(outline):,} chars (~{len(outline) // 4:,} tokens)"
-            + (f", {degraded} degraded line(s)" if degraded else "")
-        )
-
-    _echo()
-    _echo(render_tool_stats(stats, limit=10))
-
-    if not live:
-        _echo("Prompt assembly OK. Re-run with --live to call the model.")
-        return
-
-    if name == "scanner":
-        from .agents.deps import ScannerDeps
-        from .agents.scanner import build_scanner_backend, scanner_prompt
-        from .agents.tools import scanner_tools
-
-        backend = build_scanner_backend(agent_config)
-        for session in sessions:
-            deps = ScannerDeps(
-                store=store,
-                session_id=session.session_id,
-                session_content_hash=session.content_hash,
-                tool_stats=stats,
-            )
-            result = backend.run(
-                instructions=agent_config.prompt,
-                prompt=scanner_prompt(store.outline(session.session_id)),
-                tools=scanner_tools(deps),
-            )
-            _echo(f"\n{session.session_id}: {result.turns} turn(s), {len(deps.collected)} issue(s)")
-            for issue in deps.collected:
-                _echo(f"  [{issue.severity}/{issue.phase}] {issue.title}")
-                _echo(f"      events {issue.evidence_event_indices} conf={issue.confidence:.2f}")
-    else:
-        _fail("live testing of the clusterer needs issues; run `ossuary scan` instead.")
-
-
-@agents_app.command("show")
-def agents_show(
-    config_path: Path | None = typer.Option(None, "--config", help="Path to agents.yaml."),
-) -> None:
-    """Show the resolved agent configuration and where it was loaded from."""
-    try:
-        path = find_config(config_path)
-        config = load_config(config_path)
-    except (FileNotFoundError, ValueError) as exc:
-        _fail(str(exc))
-        return
-
-    from .backends import build_backend, needs_api_key
-
-    _echo(f"config: {path}")
-    for name, agent_config in sorted(config.agents.items()):
-        backend = build_backend(agent_config.model)
-        _echo(f"\n{name}:")
-        _echo(f"  model: {agent_config.model}")
-        _echo(f"  backend: {backend.name}")
-        _echo(f"  credential: {'provider API key' if needs_api_key(agent_config.model) else 'inherited from the SDK'}")
-        if backend.supports_temperature:
-            _echo(f"  temperature: {agent_config.temperature}")
-        else:
-            _echo(f"  temperature: {agent_config.temperature} (ignored; {backend.name} does not expose it)")
-        _echo(f"  max_turns: {agent_config.max_turns}")
-        _echo(f"  prompt_version: {agent_config.prompt_version}")
-        if agent_config.extra:
-            _echo(f"  extra: {agent_config.extra}")
 
 
 @app.command()

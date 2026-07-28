@@ -3,7 +3,7 @@
     "ossuary": {
       "type": "local",
       "command": "uvx",
-      "args": ["--from", "ossuary[mcp]", "ossuary-mcp"],
+      "args": ["--from", "ossuary", "ossuary-mcp"],
       "tools": ["*"],
       "env": {}
     }

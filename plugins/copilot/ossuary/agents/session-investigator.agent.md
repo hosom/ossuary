@@ -69,4 +69,6 @@ even if you would have named it differently: stable names between runs are what
 make "new this run" mean anything.
 
 Call `ossuary_write_run` only when the operator wants the findings persisted --
-it writes `.ossuary/run.json`, which `ossuary report` renders as HTML.
+it writes `.ossuary/run.json`, which `ossuary report` renders as HTML. Pass
+your own harness and model as `investigator`: Ossuary cannot see which model is
+on this end of the tools, so the report says whatever you tell it, or nothing.

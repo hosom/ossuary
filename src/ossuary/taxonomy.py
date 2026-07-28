@@ -18,7 +18,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .models import Cluster
+from .models import Cluster, ProposedCluster
 
 TAXONOMY_FILENAME = "taxonomy.json"
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -73,7 +73,7 @@ class Taxonomy:
 
     def reconcile(
         self,
-        proposals,  # list[ProposedCluster]
+        proposals: list[ProposedCluster],
         *,
         run_id: str,
         issue_lookup: dict[str, str],

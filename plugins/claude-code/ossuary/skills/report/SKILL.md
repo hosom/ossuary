@@ -1,23 +1,22 @@
 ---
-description: Render the HTML report from the artifacts an earlier Ossuary run wrote. Runs no inference.
+description: Render the HTML report from the findings an investigation recorded. Runs no inference.
 disable-model-invocation: true
 ---
 
 # Render the report
 
-Turn `.ossuary/run.json` into a single self-contained HTML file. This is cheap
-and involves no model, which is the whole reason it is a separate step from
-scanning -- the report design gets iterated on dozens of times and must never
-re-pay for inference to do it.
+Turn `.ossuary/run.json` into a single self-contained HTML file. This involves
+no model, which is why it is a separate step from investigating — the report
+gets looked at far more often than it gets produced.
 
 ```bash
-uvx --from 'ossuary[mcp]' ossuary report --no-open
+uvx --from ossuary ossuary report --no-open
 ```
 
-If there are no artifacts yet, the command says so. In that case either run
-`/ossuary:scan`, or ask the operator whether they want an interactive
-investigation instead -- the `investigate` skill records findings through the
-MCP tools and `ossuary_write_run` writes the same artifacts this command reads.
+If there are no artifacts yet, the command says so. Findings only reach disk
+when `ossuary_write_run` is called, so the usual cause is an investigation that
+was never written down: offer to run one with the `investigate` skill, or to
+call `ossuary_write_run` now if you have findings recorded in this session.
 
 After rendering, tell the operator the path and summarize the top clusters by
 issue count.

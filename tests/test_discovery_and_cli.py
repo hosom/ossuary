@@ -1,4 +1,4 @@
-"""Discovery routing and CLI smoke tests."""
+"""Discovery routing and the deterministic CLI."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from ossuary.adapters import get_adapter
-from ossuary.cache import Cache
 from ossuary.cli import app
 from ossuary.store import SessionStore
 
@@ -54,16 +53,9 @@ class TestAdapterClaiming:
             session = store.load(ref)
             assert session.events, f"{ref.path} produced no events"
 
-
-def test_issue_cache_key_separates_sources():
-    """Regression: one file read by two adapters shared a cache entry."""
-    args = dict(schema_version=1, redacted=True)
-    assert Cache.issues_key("h", "p", "m", source="claude-code", **args) != Cache.issues_key(
-        "h", "p", "m", source="codex", **args
-    )
-
-
 class TestCli:
+    """The commands that sit around an investigation, none of which call a model."""
+
     def test_sources_lists_every_adapter(self):
         result = runner.invoke(app, ["sources"])
         assert result.exit_code == 0
@@ -92,104 +84,74 @@ class TestCli:
         assert "SESSION sess-golden-0001" in result.output
         assert "idx" in result.output
 
-    def test_agents_show(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(Path(__file__).parent.parent)
-        result = runner.invoke(app, ["agents", "show"])
-        assert result.exit_code == 0
-        assert "scanner" in result.output and "clusterer" in result.output
-        assert "prompt_version" in result.output
-
-    def test_agents_test_dry_run_spends_nothing(self, monkeypatch):
-        monkeypatch.chdir(Path(__file__).parent.parent)
-        result = runner.invoke(app, ["agents", "test", "scanner", "--fixture", str(GOLDEN)])
-        assert result.exit_code == 0
-        assert "Prompt assembly OK" in result.output
-        assert "tokens" in result.output
-
-    def test_agents_test_rejects_unknown_agent(self, monkeypatch):
-        monkeypatch.chdir(Path(__file__).parent.parent)
-        result = runner.invoke(app, ["agents", "test", "nope", "--fixture", str(GOLDEN)])
-        assert result.exit_code == 1
-        assert "unknown agent" in result.output
-
-    def test_report_without_a_scan_fails_clearly(self, tmp_path, monkeypatch):
+    def test_report_without_artifacts_points_at_the_plugin(self, tmp_path, monkeypatch):
+        """The fix is to go and investigate something, so the error has to say so."""
         monkeypatch.chdir(tmp_path)
         result = runner.invoke(app, ["report", "--no-open"])
         assert result.exit_code == 1
-        assert "ossuary scan" in result.output
+        assert "ossuary_write_run" in result.output
 
-    def test_scan_then_report_end_to_end(self, tmp_path, monkeypatch):
-        """Full pipeline against a stub model: scan writes artifacts, report renders them."""
-        import shutil
-
-        shutil.copy(Path(__file__).parent.parent / "agents.yaml", tmp_path / "agents.yaml")
+    def test_investigate_then_report_end_to_end(self, tmp_path, monkeypatch):
+        """What the plugin actually does: the agent records, then `report` renders."""
         monkeypatch.chdir(tmp_path)
+        _record_a_finding(tmp_path)
 
-        scan = runner.invoke(
-            app, ["scan", str(GOLDEN), "--model", "test", "--no-cluster"]
-        )
-        assert scan.exit_code == 0, scan.output
-        assert (tmp_path / ".ossuary" / "run.json").exists()
-
-        report = runner.invoke(app, ["report", "--no-open"])
-        assert report.exit_code == 0, report.output
+        result = runner.invoke(app, ["report", "--no-open"])
+        assert result.exit_code == 0, result.output
         html = (tmp_path / "report.html").read_text(encoding="utf-8")
         assert html.startswith("<!doctype html>")
         assert "Run summary" in html
-
-    def test_rescan_is_served_from_cache(self, tmp_path, monkeypatch):
-        import shutil
-
-        shutil.copy(Path(__file__).parent.parent / "agents.yaml", tmp_path / "agents.yaml")
-        monkeypatch.chdir(tmp_path)
-
-        first = runner.invoke(app, ["scan", str(GOLDEN), "--model", "test", "--no-cluster"])
-        assert "0 served from cache" in first.output
-        second = runner.invoke(app, ["scan", str(GOLDEN), "--model", "test", "--no-cluster"])
-        assert "4 served from cache" in second.output, "an unchanged session must cost nothing"
-
-    def test_no_cache_flag_bypasses_the_cache(self, tmp_path, monkeypatch):
-        import shutil
-
-        shutil.copy(Path(__file__).parent.parent / "agents.yaml", tmp_path / "agents.yaml")
-        monkeypatch.chdir(tmp_path)
-
-        runner.invoke(app, ["scan", str(GOLDEN), "--model", "test", "--no-cluster"])
-        again = runner.invoke(
-            app, ["scan", str(GOLDEN), "--model", "test", "--no-cluster", "--no-cache"]
-        )
-        assert "0 served from cache" in again.output
-
-    def test_no_redact_warns_loudly(self, tmp_path, monkeypatch):
-        import shutil
-
-        shutil.copy(Path(__file__).parent.parent / "agents.yaml", tmp_path / "agents.yaml")
-        monkeypatch.chdir(tmp_path)
-        result = runner.invoke(
-            app,
-            ["scan", str(GOLDEN), "--model", "test", "--no-cluster", "--no-redact"],
-        )
-        assert result.exit_code == 0
-        assert "redaction disabled" in result.output
-
-    def test_limit_caps_the_session_count(self, tmp_path, monkeypatch):
-        import shutil
-
-        shutil.copy(Path(__file__).parent.parent / "agents.yaml", tmp_path / "agents.yaml")
-        monkeypatch.chdir(tmp_path)
-        result = runner.invoke(
-            app, ["scan", str(GOLDEN), "--model", "test", "--no-cluster", "--limit", "1"]
-        )
-        assert "Parsed 1 session(s)" in result.output
+        assert "Bash output capped" in html
 
     def test_export_writes_jsonl(self, tmp_path, monkeypatch):
         import json
-        import shutil
 
-        shutil.copy(Path(__file__).parent.parent / "agents.yaml", tmp_path / "agents.yaml")
         monkeypatch.chdir(tmp_path)
-        runner.invoke(app, ["scan", str(GOLDEN), "--model", "test", "--no-cluster"])
+        _record_a_finding(tmp_path)
+
         result = runner.invoke(app, ["export", "--out", "issues.jsonl"])
         assert result.exit_code == 0
         rows = [json.loads(l) for l in (tmp_path / "issues.jsonl").read_text().splitlines()]
         assert rows and "issue_id" in rows[0] and "run_id" in rows[0]
+
+    def test_taxonomy_shows_then_clears(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        _record_a_finding(tmp_path)
+
+        shown = runner.invoke(app, ["taxonomy"])
+        assert shown.exit_code == 0
+        assert "Tool output capped" in shown.output
+
+        cleared = runner.invoke(app, ["taxonomy", "--clear"])
+        assert cleared.exit_code == 0
+        assert "No stored taxonomy" in runner.invoke(app, ["taxonomy"]).output
+
+
+def _record_a_finding(cwd: Path) -> None:
+    """Drive the MCP server the way a host agent would, leaving `.ossuary/` behind."""
+    import anyio
+
+    from ossuary.mcp_server import build_server
+
+    server = build_server([GOLDEN / "claude-code"], redact=True)
+
+    def call(tool, /, **arguments):
+        return anyio.run(lambda: server.call_tool(tool, arguments))
+
+    call(
+        "ossuary_report_issue",
+        session_id="sess-golden",
+        title="Bash output capped at 30000 bytes",
+        description="Cut mid-line with exit code 0 and no indication.",
+        severity="high",
+        phase="harness",
+        evidence_event_indices=[4, 5],
+        confidence=0.9,
+    )
+    call(
+        "ossuary_propose_cluster",
+        name="Tool output capped without indication",
+        summary="Results stop at a fixed byte count with no marker.",
+        member_issue_ids=[],
+    )
+    call("ossuary_write_run", investigator="claude-code / opus")

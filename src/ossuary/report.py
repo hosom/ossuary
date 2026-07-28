@@ -115,9 +115,7 @@ def session_trace(manifest: RunManifest) -> list[dict[str, Any]]:
             ]
         count = len(scan.issues)
         plural = "" if count == 1 else "s"
-        note = "scan errored" if scan.error else f"{count} issue{plural}"
-        if scan.hit_turn_cap:
-            note += " · hit turn cap"
+        note = "errored" if scan.error else f"{count} issue{plural}"
         trace.append(
             {
                 "session_id": scan.session_id,
@@ -235,7 +233,6 @@ def build_context(
         phase_counts[issue.phase] = phase_counts.get(issue.phase, 0) + 1
 
     failed = [s for s in manifest.scans if s.error]
-    capped = [s for s in manifest.scans if s.hit_turn_cap]
 
     # The headline is the dominant failure mode where there is one, because that
     # is the sentence the reader would otherwise have to assemble themselves. It
@@ -275,7 +272,6 @@ def build_context(
         "tool_stats": manifest.tool_stats,
         "evidence": collect_evidence(manifest, store),
         "failed_scans": failed,
-        "capped_scans": capped,
         "verdict": _verdict(manifest.session_count, severity_counts),
         "headline": headline,
         "lede": lede,

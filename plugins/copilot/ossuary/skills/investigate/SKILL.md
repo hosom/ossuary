@@ -35,4 +35,6 @@ transcript. An exit code of 0 does not mean the tool did anything useful.
 
 Every issue needs evidence event indices a reader can check. Call
 `ossuary_write_run` only when the operator wants findings written to
-`.ossuary/run.json` for `ossuary report`.
+`.ossuary/run.json` for `ossuary report`, and pass your own harness and model
+as `investigator` — Ossuary cannot see which model is on this end of the tools,
+so the report credits whoever you say did the work, or nobody.
