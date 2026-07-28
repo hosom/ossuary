@@ -1,10 +1,14 @@
 # Supporting pi — investigation
 
-**Nothing here is implemented.** This is a feasibility study for supporting pi
-in both directions — as a fourth *source* Ossuary reads, and as a third *host*
-Ossuary ships a plugin for — written to the same standard as
+This is the study behind pi support, written to the same standard as
 [`formats.md`](formats.md): what was verified, what was derived from source, and
-what is still unknown.
+what is still unknown. It covers both directions — pi as a fourth *source*
+Ossuary reads, and pi as a third *host* Ossuary ships a plugin for.
+
+**The source half shipped**; `adapters/pi.py` and the format record in
+[`formats.md`](formats.md) are the result, and this document is kept as the
+reasoning behind it. **The host half did not** — see
+[Decision](#decision-the-adapter-alone).
 
 Verified date: 2026-07-28.
 
@@ -76,7 +80,12 @@ The first line of every pi session is a header with `type: "session"` and a
 registered:
 
 - Codex's sniff wants `session_meta`, or `payload` + `type` + `timestamp`; a pi
-  header has no `payload`. It does not claim pi files.
+  header has no `payload`. **This turned out to be not quite enough.** The sniff
+  reads several lines, not just the first, so a pi entry carrying a `payload` key
+  anywhere in the head of the file — an extension's `custom` entry, or a future
+  entry type — reads as a rollout line and Codex claims the transcript too. The
+  fixtures caught it. Codex now stops at a pi header (`type: "session"` with a
+  `cwd`) the same way it already stops at Claude Code's `sessionId`.
 - Claude Code's sniff wants `sessionId`, or `message` + `uuid`; pi message
   entries carry `message` + `id`, never `uuid`. It does not claim pi files.
 - Copilot claims by filename (`events.jsonl`) or a `.json` VS Code document.
@@ -167,7 +176,9 @@ is ever rejected, whatever is on disk is the only record that will ever exist*:
 
 1. Emit **every** entry, in file order. `index` stays the file ordinal, so
    `evidence_event_indices` remain stable and mean what they say.
-2. Put `entry_id`, `parent_id` and `on_active_path` in `meta`.
+2. Put `entry_id`, `parent_id` and `off_path` in `meta`. Recorded only when
+   true: absence means the entry is on the live conversation, which is the
+   common case and the one that needs no flag.
 3. Surface off-path entries in the outline. Abandoned branches are not noise —
    a user who rewound is a user whose agent went somewhere useless, which is
    exactly the failure class Ossuary exists to cluster.
@@ -176,7 +187,8 @@ Point 3 is the only change outside the adapter: `outline._flags` is a fixed,
 shared vocabulary (`E T R X P O S ~`), so a `B` for "off the active path" is a
 change to every source's legend. It is small, but it is a decision about the
 shared surface, not a private adapter detail, and it should be made
-deliberately.
+deliberately. It was: `B` is in the legend, and the explanatory line only
+appears for sessions that actually branched.
 
 The alternative — emit only the active path — is cheaper and wrong: it would
 silently delete the evidence that a rewind happened, and a session that lost
@@ -288,6 +300,8 @@ and they are the shapes most likely to break a parser written only against v3.
 ---
 
 ## Cost
+
+What it took, as built:
 
 | Change | Size |
 |---|---|
