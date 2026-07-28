@@ -84,3 +84,7 @@ rather than inventing something.
 Only call `ossuary_write_run` when the operator wants the findings persisted --
 it writes `.ossuary/run.json`, which `ossuary report` renders as HTML. Until
 then nothing is written to disk.
+
+Pass your own harness and model as `investigator`. Ossuary cannot see which
+model is on this end of the tools, so the report credits whoever you say did
+the work, or nobody.

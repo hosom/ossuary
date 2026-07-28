@@ -133,6 +133,28 @@ class StoredIssue(Issue):
     session_path: str = ""
 
 
+class ProposedCluster(BaseModel):
+    """One cluster as the investigating agent proposes it, before ids are assigned.
+
+    Separate from `Cluster` because the agent does not get to choose a
+    `cluster_id`: that is the taxonomy's job, and it is what keeps names stable
+    between runs. The agent may only claim an existing id, never mint one.
+    """
+
+    name: str = Field(description="Short human-readable name for this failure mode")
+    summary: str = Field(description="What these issues have in common and why it matters")
+    member_issue_ids: list[str] = Field(
+        default_factory=list, description="issue_id values belonging to this cluster"
+    )
+    existing_cluster_id: str | None = Field(
+        default=None,
+        description=(
+            "If this matches a cluster from the stored taxonomy, its cluster_id. "
+            "Null if this is a genuinely new failure mode."
+        ),
+    )
+
+
 class Cluster(BaseModel):
     cluster_id: str
     name: str
@@ -179,34 +201,35 @@ class ToolStats(BaseModel):
 
 
 class SessionScan(BaseModel):
-    """Result of running Agent A over one session."""
+    """What one session contributed to a run."""
 
     session_id: str
     source: Source
     path: str
     content_hash: str
     issues: list[StoredIssue] = Field(default_factory=list)
-    turns_used: int = 0
-    hit_turn_cap: bool = False
     error: str | None = None
-    from_cache: bool = False
 
 
 class RunManifest(BaseModel):
-    """Everything `report` needs, written by `scan`."""
+    """Everything `report` needs, written by `ossuary_write_run`."""
 
     run_id: str
     started_at: datetime
     finished_at: datetime | None = None
     schema_version: int = SCHEMA_VERSION
-    scanner_model: str = ""
-    clusterer_model: str = ""
-    prompt_version: str = ""
+
+    #: Who did the investigating, in their own words. Ossuary cannot know this
+    #: -- it serves transcripts to a host agent and never sees which model is on
+    #: the other end -- so the agent names itself, or this stays blank. Recorded
+    #: rather than inferred: a report that guessed would be worse than one that
+    #: admits it does not know.
+    investigator: str = ""
+
     redaction_enabled: bool = True
     session_count: int = 0
     event_count: int = 0
     issue_count: int = 0
-    cached_session_count: int = 0
     sources: dict[str, int] = Field(default_factory=dict)
     scans: list[SessionScan] = Field(default_factory=list)
     tool_stats: list[ToolStats] = Field(default_factory=list)

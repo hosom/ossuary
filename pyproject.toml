@@ -1,27 +1,20 @@
 [project]
 name = "ossuary"
 version = "0.1.0"
-description = "Find health issues in local LLM agent session transcripts."
+description = "Find health issues in local LLM agent session transcripts, from inside Claude Code or Copilot CLI."
 readme = "README.md"
 requires-python = ">=3.11"
+# Ossuary runs no inference of its own: the host agent does that, on the other
+# side of the MCP boundary. So there is no model SDK here, and no API client.
 dependencies = [
-    "pydantic-ai>=2.19,<3",
+    "mcp>=1.2",
     "pydantic>=2.9",
     "typer>=0.12",
     "jinja2>=3.1",
-    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
-# Inference without an Anthropic API key. Each SDK inherits the credentials the
-# corresponding CLI already holds, so a Claude Pro/Max or Copilot subscription
-# is enough on its own.
-claude-code = ["claude-agent-sdk>=0.2"]
-copilot = ["github-copilot-sdk>=1.0"]
-# The stdio MCP server, which lets Claude Code or Copilot CLI drive a scan
-# themselves rather than Ossuary calling out to a model.
-mcp = ["mcp>=1.2"]
-dev = ["pytest>=8.0", "claude-agent-sdk>=0.2", "mcp>=1.2"]
+dev = ["pytest>=8.0"]
 
 [project.scripts]
 ossuary = "ossuary.cli:app"
