@@ -1,26 +1,30 @@
-"""Ossuary as an MCP server, so the host agent does the investigating.
+"""Ossuary as an MCP server -- the whole of its agent-facing surface.
 
-The backends in `ossuary.backends` all point outward: Ossuary holds the
-transcripts and calls a model. This module points the other way. It exposes the
-deterministic half of Ossuary -- discovery, normalization, the outline, the
-shape measurements, the corpus statistics, redaction -- as MCP tools, and lets
-whatever agent is already running drive the investigation.
+This module exposes the deterministic half of Ossuary -- discovery,
+normalization, the outline, the shape measurements, the corpus statistics,
+redaction -- as MCP tools, and lets whatever agent is already running drive the
+investigation. Ossuary brings no model of its own; the reasoning happens on the
+far side of this boundary.
 
-That inversion is the cleanest answer to "I have a subscription, not an API
-key": inside Claude Code or Copilot CLI the inference is already paid for and
-already authenticated, and Ossuary never has to hold a credential or ask who is
-paying. It is also the only arrangement where the operator can watch the
-investigation happen and interrupt it.
+That arrangement is what makes the credential question disappear. Inside Claude
+Code or Copilot CLI the inference is already paid for and already authenticated,
+so there is nothing here to hold a key or ask whose subscription is being spent.
+It is also the only arrangement where the operator can watch the investigation
+happen and interrupt it.
 
-The tradeoff is real and worth stating: a run driven this way is not
-reproducible the way `ossuary scan` is. There is no turn cap, no prompt version
-to hash, and the host agent brings its own system prompt and its own context.
-Use this to explore a corpus; use `ossuary scan` to produce a number you intend
-to compare against next week's.
+The tradeoff is worth stating: a run driven this way is a conversation, not a
+measurement. There is no turn cap and no prompt version to hash, and the host
+agent brings its own system prompt and its own context, so two runs over the
+same corpus can differ for reasons that have nothing to do with the transcripts.
 
-Findings accumulate in memory and land in `.ossuary/run.json` only when
-`ossuary_write_run` is called, so a half-finished exploration leaves no
-artifacts behind for `ossuary report` to render as though they were a scan.
+Two properties this module is responsible for keeping:
+
+  * Findings accumulate in memory and land in `.ossuary/run.json` only when
+    `ossuary_write_run` is called, so an abandoned exploration leaves nothing
+    behind for `ossuary report` to render as though it were finished.
+  * `_Run` is shared by every agent talking to this process, which is what lets
+    a coordinator fan out one investigator per session and still write a single
+    reconciled run at the end.
 """
 
 from __future__ import annotations
@@ -100,7 +104,8 @@ def build_server(roots: list[Path] | None = None, *, redact: bool = True) -> Any
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:  # pragma: no cover - optional dependency
         raise RuntimeError(
-            "the Ossuary MCP server needs the MCP SDK: pip install 'ossuary[mcp]'"
+            "the MCP SDK is missing; it is a core dependency, so reinstall: "
+            "pip install ossuary"
         ) from exc
 
     state = _State(roots, redact=redact)
