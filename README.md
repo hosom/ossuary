@@ -7,18 +7,11 @@
 
 # OSSUARY
 
-**Where the remains are sorted**
-
 </div>
 
-Reads local LLM agent session transcripts, finds health issues in them, clusters
-those issues across the corpus, and writes a self-contained HTML report.
-
-A postmortem tool reads what is left behind. Ossuary takes a finished agent
-session — every turn, tool call, retry and dead end — and lays the remains out in
-order, so the engineer who owns the agent can see exactly where it went wrong.
-
-Built for hundreds to low thousands of sessions on a laptop.
+Ossuary reads local LLM agent session transcripts, finds health issues in them,
+and builds clusters of those issues across the corpus, outputting an HTML report
+of the findings.
 
 ```
 discover sessions
@@ -38,9 +31,9 @@ issues + clusters, reconciled against the taxonomy
 Jinja2 → single-file HTML → open browser
 ```
 
-Ossuary supplies everything above and below the line. The reasoning in the
-middle is done by the coding agent you already have open, under whatever
-credentials it already holds.
+Ossuary supplies everything except for the coding agent. To make sure that it
+functions in as many environments as possible, Ossuary runs as a plugin for
+Claude Code and Copilot with a paired local MCP.
 
 ## Install
 
@@ -100,6 +93,25 @@ ossuary export --out issues.jsonl
 ossuary-mcp                                # the MCP server, for wiring up by hand
 ```
 
+## Tests
+
+```bash
+python -m pytest
+```
+
+Golden-file tests run over fixtures that include deliberately malformed lines,
+out-of-order tool pairing, an orphaned result, a payload capped at exactly 30000
+bytes, and an empty result with a 30-second duration.
+
+## Taxonomy
+
+Named clusters persist to `.ossuary/taxonomy.json`. Later runs assign to existing
+clusters where they fit and only propose genuinely new ones — which stops reports
+reshuffling between runs and makes "new issue types this run" a real signal
+rather than an artifact of the model choosing different words.
+
+<details>
+<summary>This is Claude slop. You shouldn't read this unless you're really bored.</summary>
 ## Design decisions worth not undoing
 
 **Issue discovery is the model's job, not a regex's.** There are no heuristic
@@ -195,13 +207,6 @@ Nothing else leaves the machine: Ossuary opens no sockets and makes no API
 calls. Whatever the transcripts are shown to is whatever you have already
 chosen to run.
 
-## Taxonomy
-
-Named clusters persist to `.ossuary/taxonomy.json`. Later runs assign to existing
-clusters where they fit and only propose genuinely new ones — which stops reports
-reshuffling between runs and makes "new issue types this run" a real signal
-rather than an artifact of the model choosing different words.
-
 ## The report
 
 `ossuary report` renders one self-contained HTML file — inline CSS and JS, no
@@ -244,18 +249,9 @@ register lives in the naming and the surfaces, never in the diagnosis: the
 engineer reading this is debugging at 6pm and wants the cause of death and the
 line number, not a metaphor.
 
-## Tests
-
-```bash
-python -m pytest
-```
-
-Golden-file tests run over fixtures that include deliberately malformed lines,
-out-of-order tool pairing, an orphaned result, a payload capped at exactly 30000
-bytes, and an empty result with a 30-second duration.
-
 ## Not in v1
 
 No regex/heuristic issue detectors. No embeddings or vector store. No web
 service, daemon, or TUI. No database — JSON and JSONL on disk are sufficient at
 this scale. No model SDK, no API client, and no inference of Ossuary's own.
+</details>
