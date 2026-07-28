@@ -1,0 +1,5 @@
+{"type": "session", "version": 1, "id": "019f0000-1111-2222-3333-444455556666", "timestamp": "2026-01-02T03:04:05.000Z", "cwd": "/home/user/legacy"}
+{"type": "message", "timestamp": "2026-01-02T03:04:06.000Z", "message": {"role": "user", "content": "what changed in the config?", "timestamp": 1767323046000}}
+{"type": "message", "timestamp": "2026-01-02T03:04:07.000Z", "message": {"role": "hookMessage", "customType": "house-rules", "content": "Project rules were injected here.", "display": false, "timestamp": 1767323047000}}
+{"type": "compaction", "timestamp": "2026-01-02T03:04:08.000Z", "summary": "Earlier turns compacted.", "firstKeptEntryIndex": 1, "tokensBefore": 41000}
+{"type": "telemetry_v9", "timestamp": "2026-01-02T03:04:09.000Z", "counters": {"emitted": 3}}

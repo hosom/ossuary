@@ -13,6 +13,8 @@ CLAUDE_ROOT = GOLDEN / "claude-code" / "projects"
 CODEX_ROOT = GOLDEN / "codex" / "sessions"
 COPILOT_CLI_ROOT = GOLDEN / "copilot" / "session-state"
 COPILOT_VSCODE_ROOT = GOLDEN / "copilot" / "vscode"
+PI_ROOT = GOLDEN / "pi" / "sessions"
+PI_LEGACY_ROOT = GOLDEN / "pi" / "legacy"
 
 
 def _parse_one(source: str, root: Path) -> Session:
@@ -40,6 +42,16 @@ def copilot_cli_session() -> Session:
 @pytest.fixture
 def copilot_vscode_session() -> Session:
     return _parse_one("copilot", COPILOT_VSCODE_ROOT)
+
+
+@pytest.fixture
+def pi_session() -> Session:
+    return _parse_one("pi", PI_ROOT)
+
+
+@pytest.fixture
+def pi_legacy_session() -> Session:
+    return _parse_one("pi", PI_LEGACY_ROOT)
 
 
 @pytest.fixture

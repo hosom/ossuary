@@ -116,6 +116,8 @@ def _flags(event: NormalizedEvent) -> str:
         flags.append("O")
     if event.meta.get("thinking_signature_only"):
         flags.append("S")
+    if event.meta.get("off_path"):
+        flags.append("B")
     return "".join(flags)
 
 
@@ -146,7 +148,8 @@ def _legend(session: Session) -> str:
         "meta=harness bookkeeping BAD=line failed to parse",
         "fl:   E=empty body  T=does not terminate cleanly  R=round byte count  "
         "X=error field set  P=parse error  O=result with no matching call  "
-        "S=thinking stored with a signature but no text  ~=duration derived",
+        "S=thinking stored with a signature but no text  ~=duration derived  "
+        "B=on a branch the session moved off",
         "The preview column is a fixed-width index entry cut for display, not "
         "payload text; use read_events to see any event in full.",
     ]
@@ -155,5 +158,12 @@ def _legend(session: Session) -> str:
             "Durations marked ~ are wall-clock gaps between the call and its "
             "result line, because this CLI does not record a duration for these "
             "tools. They include any time the harness spent elsewhere."
+        )
+    if any(e.meta.get("off_path") for e in session.events):
+        lines.append(
+            "Rows marked B are on a branch this session moved off: someone "
+            "rewound to an earlier point and continued from there. Those events "
+            "happened, and are still on disk, but are no longer part of the "
+            "conversation the model sees. Rows are in file order either way."
         )
     return "\n".join(lines)
