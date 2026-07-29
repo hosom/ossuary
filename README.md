@@ -82,10 +82,17 @@ Nothing reaches disk until `ossuary_write_run` runs, so an investigation you
 abandon leaves no artifacts behind. Writing a run archives the previous one
 under `.ossuary/runs/` rather than replacing it.
 
+The same property has a sharp edge: findings live in the MCP server's memory and
+nowhere else, so a server that restarts mid-investigation comes back with an
+empty buffer and no way to know it ever held anything. Writing an empty run over
+one that found something is therefore refused — it would replace a finished
+investigation with a blank. Pass `allow_empty` to record a run that genuinely
+found nothing.
+
 The CLI is the deterministic surface around that — nothing here calls a model:
 
 ```bash
-ossuary sources [PATHS...] [--source claude-code|codex|copilot]
+ossuary sources [PATHS...] [--source claude-code|codex|copilot|pi]
 ossuary outline <session-id|path>          # one session, by hand
 ossuary report [--open/--no-open] [--out report.html]
 ossuary taxonomy [--show/--clear]
@@ -101,7 +108,8 @@ python -m pytest
 
 Golden-file tests run over fixtures that include deliberately malformed lines,
 out-of-order tool pairing, an orphaned result, a payload capped at exactly 30000
-bytes, and an empty result with a 30-second duration.
+bytes, an empty result with a 30-second duration, and a session that was rewound
+so that some of what is on disk is on no conversational path at all.
 
 ## Taxonomy
 
@@ -155,7 +163,7 @@ error, and parsing continues. Whatever is on disk is the only record that will
 ever exist of that session. See [`docs/formats.md`](docs/formats.md).
 
 **Ossuary does not bring its own model.** The hard part here was never calling
-one: it was turning four incompatible transcript formats into a single event
+one: it was turning five incompatible transcript formats into a single event
 model, measuring payloads without editorialising, computing the corpus-wide
 statistics no single session can show, and never shortening anything without
 saying so. A coding agent already has a model, a context window and a turn loop.

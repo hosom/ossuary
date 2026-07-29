@@ -5,7 +5,7 @@ description: Investigate local LLM agent session transcripts for health issues -
 # Investigate agent session transcripts
 
 You have the Ossuary MCP tools. They give you every local Claude Code, Codex,
-and Copilot session transcript on this machine, normalized to one event model,
+Copilot and pi session transcript on this machine, normalized to one event model,
 with byte counts, durations, exit codes, and corpus-wide tool statistics
 already computed. Payloads are redacted before you see them.
 

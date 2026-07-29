@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 # version are re-derived rather than trusted.
 SCHEMA_VERSION = 1
 
-Source = Literal["claude-code", "codex", "copilot"]
+Source = Literal["claude-code", "codex", "copilot", "pi"]
 Role = Literal["user", "assistant", "system", "unknown"]
 Kind = Literal[
     "message", "tool_call", "tool_result", "thinking", "meta", "unparseable"

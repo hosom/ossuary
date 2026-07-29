@@ -9,11 +9,13 @@ from .base import Adapter
 from .claude_code import ClaudeCodeAdapter
 from .codex import CodexAdapter
 from .copilot import CopilotAdapter
+from .pi import PiAdapter
 
 _ADAPTERS: dict[str, type[Adapter]] = {
     "claude-code": ClaudeCodeAdapter,
     "codex": CodexAdapter,
     "copilot": CopilotAdapter,
+    "pi": PiAdapter,
 }
 
 ALL_SOURCES: tuple[str, ...] = tuple(_ADAPTERS)
@@ -38,6 +40,7 @@ __all__ = [
     "ClaudeCodeAdapter",
     "CodexAdapter",
     "CopilotAdapter",
+    "PiAdapter",
     "ALL_SOURCES",
     "get_adapter",
     "all_adapters",
