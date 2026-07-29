@@ -10,11 +10,15 @@ file disagrees with this fixture, the file wins and the adapter changes.
 
 from __future__ import annotations
 
+import time
+from datetime import timezone
 from pathlib import Path
+
+import pytest
 
 from ossuary.adapters import get_adapter
 from ossuary.models import Session
-from ossuary.outline import render_outline
+from ossuary.outline import _flags, render_outline
 
 GOLDEN = Path(__file__).parent / "golden"
 
@@ -108,6 +112,62 @@ class TestParsing:
         assert event.kind == "meta"
         assert "telemetry_v9" in (event.parse_error or "")
         assert "emitted" in event.text
+
+
+class TestTimestamps:
+    """pi writes an ISO string with a `Z` on every entry and an epoch-ms number
+    inside the message on that same entry. Both are UTC on disk. Reading the
+    number as local time put a session's meta rows hours away from its
+    conversation rows -- invisible on a UTC machine, which is why this fixes the
+    clock to somewhere else."""
+
+    @pytest.fixture(autouse=True)
+    def _central_time(self, monkeypatch):
+        if not hasattr(time, "tzset"):
+            pytest.skip("no tzset on this platform")
+        monkeypatch.setenv("TZ", "America/Chicago")
+        time.tzset()
+        yield
+        time.tzset()
+
+    def test_entry_and_message_clocks_agree(self, pi_session: Session):
+        header = pi_session.events[0]
+        first_message = pi_session.events[3]
+        assert header.ts is not None and first_message.ts is not None
+        assert header.ts.hour == 9, "the entry ISO timestamp, read as UTC"
+        assert first_message.ts.hour == 9, "the message epoch-ms, read as UTC too"
+
+    def test_every_timestamp_is_utc(self, pi_session: Session):
+        stamped = [e.ts for e in pi_session.events if e.ts is not None]
+        assert stamped
+        assert all(e.utcoffset() == timezone.utc.utcoffset(None) for e in stamped)
+
+    def test_the_outline_says_which_zone_it_is_showing(self, pi_session: Session):
+        assert "time is UTC." in render_outline(pi_session)
+
+    def test_a_duration_across_both_spellings_is_measured_not_lost(self, tmp_path: Path):
+        """An assistant message with no timestamp of its own falls back to the
+        entry's ISO one; subtracting a naive time from an aware one raises, and
+        the whole line would degrade to unparseable."""
+        path = tmp_path / "mixed.jsonl"
+        path.write_text(
+            '{"type": "session", "version": 3, "id": "s1", '
+            '"timestamp": "2026-01-01T00:00:00.000Z", "cwd": "/x"}\n'
+            '{"type": "message", "id": "a", "parentId": null, '
+            '"timestamp": "2026-01-01T00:00:10.000Z", "message": {"role": "assistant", '
+            '"content": [{"type": "toolCall", "id": "c1", "name": "bash", '
+            '"arguments": {"command": "true"}}], "stopReason": "toolUse"}}\n'
+            '{"type": "message", "id": "b", "parentId": "a", '
+            '"timestamp": "2026-01-01T00:00:12.000Z", "message": {"role": "toolResult", '
+            '"toolCallId": "c1", "toolName": "bash", '
+            '"content": [{"type": "text", "text": "ok"}], "isError": false, '
+            '"timestamp": 1767225612000}}\n'
+        )
+        adapter = get_adapter("pi", roots=[tmp_path])
+        session = adapter.parse(adapter.discover([tmp_path])[0])
+        assert session.parse_error_count == 0
+        result = next(e for e in session.events if e.kind == "tool_result")
+        assert result.shape is not None and result.shape.duration_ms == 2000
 
 
 class TestToolResults:
@@ -220,6 +280,19 @@ class TestHarnessSignals:
         assert event.kind == "meta"
         assert event.text == "turn ended: error -- provider returned 500 after 3 retries"
         assert event.meta["stop_reason"] == "error"
+
+    def test_a_failed_turn_is_flagged_on_the_row_that_looks_empty(self, pi_session: Session):
+        """Four investigators reading four sessions each concluded pi swallows
+        these failures silently, because the empty turn is one row and the error
+        text is the next one. The flag goes on both."""
+        empty_turn = next(
+            e for e in pi_session.events
+            if e.kind == "message" and e.role == "assistant" and not e.text
+        )
+        error_row = next(e for e in pi_session.events if e.meta.get("turn_end"))
+        assert "F" in _flags(empty_turn), "the row that reads as a turn that did nothing"
+        assert "F" in _flags(error_row)
+        assert "reads as a turn that simply produced nothing" in render_outline(pi_session)
 
     def test_model_changes_are_visible(self, pi_session: Session):
         event = next(e for e in pi_session.events if e.meta.get("entry_type") == "model_change")

@@ -18,10 +18,17 @@ from __future__ import annotations
 
 import hashlib
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ..models import NormalizedEvent, Session, SessionRef, Source
+
+
+def _as_utc(value: datetime) -> datetime:
+    """A parsed datetime in UTC, reading a missing zone as UTC."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 class Adapter(ABC):
@@ -92,14 +99,27 @@ class Adapter(ABC):
 
     @staticmethod
     def parse_timestamp(value: object) -> datetime | None:
-        """Best-effort timestamp parsing. Returns None rather than raising."""
+        """Best-effort timestamp parsing, always in UTC. Never raises.
+
+        Every timestamp this returns is timezone-aware and in UTC, whatever
+        spelling it arrived in. That is not tidiness: one CLI writes an ISO
+        string with a `Z` on its entries and an epoch-milliseconds number inside
+        the messages on those same entries, and reading the number as local time
+        put half of a session's rows hours away from the other half while both
+        were the same instant on disk. Mixed awareness is also unsubtractable, so
+        a derived duration across the two spellings raised rather than measured.
+
+        A string with no zone at all is read as UTC. That is an assumption, and
+        it is the one every CLI here has been observed to mean, but it is an
+        assumption rather than a reading.
+        """
         if value is None:
             return None
         if isinstance(value, (int, float)):
             try:
                 # Heuristic: values past ~2001 in ms are too large to be seconds.
                 seconds = value / 1000.0 if value > 1e11 else float(value)
-                return datetime.fromtimestamp(seconds)
+                return datetime.fromtimestamp(seconds, tz=timezone.utc)
             except (OverflowError, OSError, ValueError):
                 return None
         if isinstance(value, str):
@@ -107,12 +127,12 @@ class Adapter(ABC):
             if not text:
                 return None
             try:
-                return datetime.fromisoformat(text.replace("Z", "+00:00"))
+                return _as_utc(datetime.fromisoformat(text.replace("Z", "+00:00")))
             except ValueError:
                 pass
             for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S"):
                 try:
-                    return datetime.strptime(text, fmt)
+                    return _as_utc(datetime.strptime(text, fmt))
                 except ValueError:
                     continue
         return None

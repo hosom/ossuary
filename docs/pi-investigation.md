@@ -339,12 +339,18 @@ word "pi".
   carrying stringified JSON, never to a parse failure.
 - **Which timestamp to trust.** Entries carry an ISO `timestamp` and the message
   inside carries a Unix-ms `timestamp`. They are written microseconds apart by
-  the same process, but only the ms one is precise enough for tool durations. It
-  is also unverified whether the assistant message's timestamp is stamped when
-  the turn starts streaming or when it completes — which decides whether a
-  derived duration includes the model's own generation time. That needs a real
-  session with a slow tool call to settle, and until it is settled the duration
-  is `derived` and the outline says so.
+  the same process, but only the ms one is precise enough for tool durations.
+
+  Settled since, against real sessions: **both are UTC on disk.** Reading the
+  epoch-ms number as local time — which `parse_timestamp` did — put every meta
+  row hours away from every conversation row in the same session, and made a
+  duration spanning the two spellings raise instead of measure. Both are now read
+  as UTC, and the outline says which zone it is showing.
+
+  Still unverified: whether the assistant message's timestamp is stamped when the
+  turn starts streaming or when it completes, which decides whether a derived
+  duration includes the model's own generation time. Until that is settled the
+  duration is `derived` and the outline says so.
 
 ---
 

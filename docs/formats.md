@@ -245,6 +245,13 @@ pi records no per-tool duration. Each message carries a Unix-ms `timestamp`
 alongside the entry's ISO one, so durations are the gap between an assistant
 message and its `toolResult`, marked `derived`.
 
+Both spellings are UTC on disk, and `Adapter.parse_timestamp` returns every
+timestamp as timezone-aware UTC for exactly this reason: reading the epoch-ms
+number as local time put a session's meta rows hours away from its conversation
+rows while both described the same instant, and mixing an aware time with a naive
+one raised rather than measured when a duration spanned the two. The outline says
+`time is UTC.` in its legend.
+
 The only genuinely recorded exit code in a pi transcript is on `bashExecution` —
 the user's own `!command` — which the adapter splits into a call and a result so
 the code lands on a shape record. The bash *tool* reports failure by appending

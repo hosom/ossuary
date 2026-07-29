@@ -172,7 +172,47 @@ class TestRecording:
         monkeypatch.chdir(tmp_path)
         call(server, "ossuary_report_issue", **AN_ISSUE)
         call(server, "ossuary_write_run")
+        call(server, "ossuary_write_run", allow_empty=True)
+        assert read_manifest(tmp_path).issue_count == 0
+
+
+class TestProtectingAFinishedRun:
+    """Findings live in memory until they are written, so a server that restarts
+    mid-investigation comes back empty with no way to know it ever held anything.
+    The next write must not turn a finished investigation into a blank one."""
+
+    def test_an_empty_run_will_not_overwrite_findings(self, server, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        call(server, "ossuary_report_issue", **AN_ISSUE)
         call(server, "ossuary_write_run")
+
+        with pytest.raises(Exception, match="Refusing to write a run with no issues"):
+            call(server, "ossuary_write_run")
+
+        assert read_manifest(tmp_path).issue_count == 1, "the good run is untouched"
+
+    def test_the_refusal_says_where_the_previous_run_is(self, server, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        call(server, "ossuary_report_issue", **AN_ISSUE)
+        call(server, "ossuary_write_run")
+        run_id = read_manifest(tmp_path).run_id
+
+        with pytest.raises(Exception, match=f"runs/{run_id}.json"):
+            call(server, "ossuary_write_run")
+        assert (tmp_path / ".ossuary" / "runs" / f"{run_id}.json").exists()
+
+    def test_finding_nothing_is_still_a_result(self, server, tmp_path, monkeypatch):
+        """The first run of a clean corpus has nothing to destroy."""
+        monkeypatch.chdir(tmp_path)
+        assert "run.json" in call(server, "ossuary_write_run")
+        assert read_manifest(tmp_path).issue_count == 0
+
+    def test_an_empty_run_can_be_written_deliberately(self, server, tmp_path, monkeypatch):
+        """A corpus that was dirty and is now clean is a real thing to record."""
+        monkeypatch.chdir(tmp_path)
+        call(server, "ossuary_report_issue", **AN_ISSUE)
+        call(server, "ossuary_write_run")
+        assert "run.json" in call(server, "ossuary_write_run", allow_empty=True)
         assert read_manifest(tmp_path).issue_count == 0
 
 

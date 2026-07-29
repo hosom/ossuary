@@ -38,7 +38,14 @@ from typing import Any
 from .adapters import ALL_SOURCES
 from .aggregate import compute_tool_stats, corpus_event_count, render_tool_stats
 from .models import Issue, ProposedCluster, RunManifest, SessionScan, StoredIssue, ToolStats
-from .pipeline import artifact_dir, corpus_summary, issue_id_for, make_run_id, write_manifest
+from .pipeline import (
+    artifact_dir,
+    corpus_summary,
+    issue_id_for,
+    make_run_id,
+    read_manifest,
+    write_manifest,
+)
 from .redact import Redactor
 from .store import DEFAULT_EVENT_BUDGET, SessionStore
 from .taxonomy import TAXONOMY_FILENAME, Taxonomy
@@ -96,6 +103,49 @@ class _State:
                 f"no session matching {session_id!r}. Call ossuary_sources to list them."
             )
         raise ValueError(f"{session_id!r} is ambiguous: {', '.join(matches[:8])}")
+
+
+def _refuse_to_erase_findings(run: _Run, *, allow_empty: bool) -> None:
+    """Stop a run that recorded nothing from overwriting one that found something.
+
+    Issues live in this process's memory and nowhere else until the run is
+    written, which is what keeps an abandoned exploration off disk. The price of
+    that is a server that restarts mid-investigation: it comes back with an empty
+    buffer and no way to know it ever held anything, and the next
+    `ossuary_write_run` replaces a finished investigation with a blank one. That
+    has happened to somebody, on a run of 36 issues.
+
+    Nothing is recoverable at this point -- the findings were never on disk, by
+    design -- so the only useful move is to refuse before the good run is
+    replaced, and to say where the archive of it is.
+
+    A run that genuinely found nothing is a real result, so this refuses rather
+    than forbids. `allow_empty` writes it.
+    """
+    if run.issues or allow_empty:
+        return
+
+    base = Path.cwd()
+    try:
+        previous = read_manifest(base)
+    except Exception:  # noqa: BLE001 - unreadable or absent: nothing to protect
+        return
+    if previous.issue_count <= 0:
+        return
+
+    archive = artifact_dir(base) / "runs" / f"{previous.run_id}.json"
+    raise ValueError(
+        f"Refusing to write a run with no issues over {artifact_dir(base) / 'run.json'}, "
+        f"which holds {previous.issue_count} issue(s) from {previous.run_id}.\n\n"
+        "Nothing has been recorded in this server process. If you recorded "
+        "findings earlier in this conversation, this process restarted and the "
+        "buffer went with it: findings are deliberately not written to disk "
+        "before ossuary_write_run, so there is nothing here to recover.\n\n"
+        f"The previous run is intact, and archived at {archive}.\n\n"
+        "Investigate the sessions again to rebuild the findings, or call "
+        "ossuary_write_run with allow_empty=true if this run genuinely found "
+        "nothing."
+    )
 
 
 def _server_class() -> Any:
@@ -348,7 +398,7 @@ def build_server(roots: list[Path] | None = None, *, redact: bool = True) -> Any
         return "\n".join(lines)
 
     @mcp.tool()
-    def ossuary_write_run(investigator: str = "") -> str:
+    def ossuary_write_run(investigator: str = "", allow_empty: bool = False) -> str:
         """Write everything recorded so far to `.ossuary/`, for `ossuary report`.
 
         Call this once, at the end. Nothing is persisted before it, so an
@@ -357,9 +407,14 @@ def build_server(roots: list[Path] | None = None, *, redact: bool = True) -> Any
         `investigator` is how you want to be named in the report -- your harness
         and model, if you know them. Ossuary cannot see which model is on the
         other end of these tools, so it records what you say or nothing at all.
+
+        `allow_empty` writes a run that found nothing. Needed only when the
+        previous run found something, because that is the case where an empty
+        write destroys a result rather than recording one.
         """
         state.ensure_loaded()
         run = state.run
+        _refuse_to_erase_findings(run, allow_empty=allow_empty)
         sessions = state.store.sessions
         by_session: dict[str, list[StoredIssue]] = {}
         for issue in run.issues:

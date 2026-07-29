@@ -82,6 +82,13 @@ Nothing reaches disk until `ossuary_write_run` runs, so an investigation you
 abandon leaves no artifacts behind. Writing a run archives the previous one
 under `.ossuary/runs/` rather than replacing it.
 
+The same property has a sharp edge: findings live in the MCP server's memory and
+nowhere else, so a server that restarts mid-investigation comes back with an
+empty buffer and no way to know it ever held anything. Writing an empty run over
+one that found something is therefore refused — it would replace a finished
+investigation with a blank. Pass `allow_empty` to record a run that genuinely
+found nothing.
+
 The CLI is the deterministic surface around that — nothing here calls a model:
 
 ```bash
