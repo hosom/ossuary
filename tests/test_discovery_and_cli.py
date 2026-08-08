@@ -26,10 +26,10 @@ class TestAdapterClaiming:
         for path, sources in by_path.items():
             assert len(sources) == 1, f"{path} claimed by {sources}"
 
-    def test_all_four_fixtures_are_found(self):
+    def test_every_fixture_is_found(self):
         refs = SessionStore().discover(roots=[GOLDEN])
-        assert {r.source for r in refs} == {"claude-code", "codex", "copilot"}
-        assert len(refs) == 4
+        assert {r.source for r in refs} == {"claude-code", "codex", "copilot", "pi"}
+        assert len(refs) == 6
 
     def test_codex_does_not_claim_a_claude_code_file(self):
         path = next((GOLDEN / "claude-code").rglob("*.jsonl"))
@@ -59,7 +59,7 @@ class TestCli:
     def test_sources_lists_every_adapter(self):
         result = runner.invoke(app, ["sources"])
         assert result.exit_code == 0
-        for source in ("claude-code", "codex", "copilot"):
+        for source in ("claude-code", "codex", "copilot", "pi"):
             assert source in result.output
         assert "session(s) total" in result.output
 

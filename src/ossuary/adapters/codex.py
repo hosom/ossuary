@@ -70,6 +70,8 @@ class CodexAdapter(Adapter):
         for record in self.head_records(path):
             if "sessionId" in record:
                 return False  # Claude Code
+            if record.get("type") == "session" and "cwd" in record:
+                return False  # pi: a session header, not a rollout line
             if record.get("type") == "session_meta":
                 return True
             if "payload" in record and "type" in record and "timestamp" in record:

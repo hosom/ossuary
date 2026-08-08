@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from ossuary.elide import MARKER_RE, is_elided
-from ossuary.models import Session
-from ossuary.outline import _RULE, render_outline
+from ossuary.models import NormalizedEvent, Session
+from ossuary.outline import _RULE, _flags, render_outline
 from ossuary.store import SessionStore
 
 
@@ -34,6 +34,27 @@ class TestOutline:
         ]
         projected_tokens = (sum(len(r) for r in rows) / len(rows)) * 400 / 3.5
         assert projected_tokens < 11_000, f"400 events would cost ~{projected_tokens:.0f} tokens"
+
+    def test_an_abnormal_stop_reason_is_flagged_in_every_spelling(self):
+        """`max_tokens` and `length` are the same event under two CLIs' names.
+
+        The flag is on the recorded reason, never on a guess: a turn that ended
+        normally carries no flag however little it produced."""
+        def flags_for(stop_reason: str) -> str:
+            return _flags(
+                NormalizedEvent(
+                    session_id="s", source="claude-code", index=0,
+                    role="assistant", kind="message", text="",
+                    meta={"stop_reason": stop_reason},
+                )
+            )
+
+        assert flags_for("max_tokens") == "F", "Claude Code's spelling"
+        assert flags_for("length") == "F", "pi's spelling"
+        assert flags_for("error") == "F"
+        assert flags_for("aborted") == "F"
+        assert flags_for("tool_use") == "", "a turn that ended normally"
+        assert flags_for("end_turn") == ""
 
     def test_shape_signals_reach_the_row(self, claude_session: Session):
         outline = render_outline(claude_session)
