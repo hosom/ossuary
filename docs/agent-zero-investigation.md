@@ -18,9 +18,11 @@ disagrees with this document, the file wins.
 Verdict: **the parse is easy and the discovery is hard.** The format is a single
 JSON object per chat with a clean, timestamped event list inside it — closer to
 Copilot's VS Code blobs than to anything JSONL. What has no precedent among the
-four current sources is that Agent Zero keeps *two* records of the same session
-which disagree with each other, throws parts of both away on purpose, and by
-default stores the result inside a Docker volume rather than under `$HOME`.
+four current sources is that Agent Zero keeps *two* records of the same session,
+neither of which is a superset of the other — a timestamped log that is cut for
+display and capped at 1000 items, and a model-facing history that keeps full text
+but has no clock — and that by default it stores the result inside a Docker
+volume rather than under `$HOME`.
 
 ---
 
@@ -260,43 +262,90 @@ one thing — they are two lossy records that lose *different* things:
 | Reasoning | `kvps.reasoning`, verbatim | not present |
 | Token usage | not present | `metadata` on assistant messages |
 | Errors, warnings, subagent calls | present | mostly not |
-| What it loses | everything past 1000 items | anything compression has summarised away |
+| Payload fidelity | a display copy, cut at 15000 chars | what the model was actually given |
+| What it loses | everything past 1000 items, and the tail of every long payload | only what attention compression deleted |
 | What it is | what the user saw | what the model was given |
+
+**The log is never a full-fidelity record, at any moment, anywhere.** Truncation
+is applied on the way *in* — `Log._update_item` calls `_truncate_content` before
+the item is stored — so even the live in-memory log holds the cut copy. The
+1000-item cap on save then removes whole items. There is no point in the process
+at which a complete log exists to be recovered.
+
+The history is the opposite, and this is the part most likely to be assumed
+wrong: **most of Agent Zero's history compression is additive, not destructive.**
+`Message.set_summary()` fills a `summary` field and leaves `content` alone;
+`Message.to_dict` writes *both*. Topics rolled into a `Bulk` are kept as that
+bulk's `records`; bulks merged into a bulk are kept the same way.
+`History.output()` prefers `summary or content` when building the model's
+context, so the model stops seeing the original — but the original is still in
+the file. Even `trim_embeds`, which drops old screenshots out of context, does it
+with `set_summary("embedded data removed")` and leaves the base64 in `content`
+forever.
+
+Exactly one routine path deletes: `Topic.compress_attention` replaces a run of
+middle messages with a single summary message
+(`self.messages[1:n] = [sum_msg]`), and those Message objects are gone at the
+next save. It is the common case for any session that outgrows the model's
+history budget (`ctx_length × ctx_history`, 128000 × 0.7 by default), so it is
+not exotic — but it is the *only* one. The one other deleting path,
+`compress_bulks`' "remove the oldest bulk", is unreachable as written: it runs
+only when `merge_bulks_by` returns False, which happens only when there are no
+bulks, and it then pops from an empty list.
+
+So: a session that never exceeded the history budget has its complete original
+text in `chat.json`, and a session that did has everything except the attention
+windows that were collapsed. That is a much better record than the log, and it
+changes what the join is *for*.
 
 **Recommendation: the log is the event stream; the history is joined onto it.**
 
 `LogItem.id` is passed as the history message id at every site that creates both
 (`hist_add_user_message`, `hist_add_ai_response`, `hist_add_tool_result`,
 `hist_add_warning`), so the join is by recorded id — no positional guessing. That
-join buys three things nothing else gives:
+join buys four things nothing else gives:
 
-1. **The real tool name.** Most tools put `_tool_name` in `kvps`, but the six
+1. **The payload the model actually received.** Where the join finds a history
+   message, its `tool_result` is the untruncated text; the log item's `content`
+   is a display copy cut at 15000 chars. **The event text and the shape record
+   should come from the history, and fall back to the log only where the history
+   message is gone**, with `meta` recording which of the two was measured. This
+   is the same rule the Claude Code adapter already follows — it reads the
+   block's `content` because "that is what the model actually saw" — and getting
+   it backwards here would put a 15000-char UI limit into `ossuary_tool_stats`
+   as though it were a tool's own behaviour.
+2. **The real tool name.** Most tools put `_tool_name` in `kvps`, but the six
    that override `get_log_object()` — code execution, browser, subagent, skills,
    wait, office — do not, and their name survives only in the heading string
    (`Using tool 'x'`) and in the history message's `tool_name` field. Take it
    from the history. Regex-matching a human-readable heading for a fact the
    corpus statistics then aggregate is the same mistake as parsing an exit code
    out of prose, and `docs/pi-investigation.md` already argues that case.
-2. **Token usage** on assistant turns, from `metadata`.
-3. **Evidence of compression** — the part that matters most.
+3. **Token usage** on assistant turns, from `metadata`.
+4. **Evidence of compression.**
 
-Because the second half of the recommendation is: **emit a `meta` event for every
-history record that has been summarised.** A `Topic` with a non-empty `summary`,
-a `Bulk` with one, a `Message` whose `summary` is set — each of those is a place
-where the model's own record of this session was overwritten with a shorter one,
-in place, destructively (`Topic.compress_attention` literally does
-`self.messages[1:n] = [sum_msg]`). An investigation into why an agent forgot
-something it had been told needs to see that the telling was compressed away, and
-no other source in the corpus has a comparable event. Do not try to interleave
-these into the log's timeline — they have no timestamps and belong nowhere in it.
-Emit them as a trailing block, ordered by `sequence`, and say in the outline
-legend what they are.
+That last one is narrower than it first looks, and it should be recorded for what
+it is. A `summary` sitting beside a `content` says the model stopped being shown
+the original at some point — the text is still there to read, and the event
+should say so rather than implying a loss. What is genuinely lost is a collapsed
+attention window: a `Topic` whose `messages` jump a `sequence` range is a place
+where messages that existed were replaced by one summary, and the gap in
+`sequence` gives the count exactly. Emit a `meta` event there, naming the range.
+An investigation into why an agent forgot something it had been told needs to see
+that the telling was collapsed, and no other source in the corpus has a
+comparable event.
+
+These history events have no timestamps, so do not try to interleave them into
+the log's timeline. Emit them as a trailing block ordered by `sequence`, and say
+in the outline legend what they are.
 
 The alternative — parse the history and ignore the log — throws away every
 timestamp, every duration, every error item and the entire reasoning stream. The
 other alternative — parse the log and ignore the history — throws away the tool
-names for six tools, all token accounting, and any evidence that compression
-happened. Neither is defensible on its own.
+names for six tools, all token accounting, every payload's tail past 15000
+chars, and any evidence that compression happened. Neither is defensible on its
+own, and the second is worse than it sounds: it would make Ossuary measure Agent
+Zero's UI rather than Agent Zero.
 
 ## Decision 2: subordinate agents
 
@@ -357,8 +406,13 @@ nothing else. The full record is in `backups/pre-compact-<ts>.json`, which is wh
 discovery must read that directory. Where both exist, they are two sessions in
 Ossuary's terms, and the summary event should name the backup it came from.
 
-**3. History compression rewrites messages in place** — covered under Decision 1.
-Detectable through the `summary` fields; invisible if the history is not read.
+**3. Attention-window compression deletes messages** — covered under Decision 1.
+It is the one history path that discards text rather than shadowing it, it leaves
+a gap in `sequence` that gives the count exactly, and it is invisible if the
+history is not read. Note the asymmetry with loss 1: the log keeps (a truncated
+copy of) messages the history deleted, and the history keeps the full text of
+messages the log truncated. Neither record is a superset of the other, which is
+the whole argument for reading both.
 
 **4. Three different truncation markers, meaning three different things.** All
 three are Agent Zero's, none is Ossuary's, and none should be stripped:
@@ -393,7 +447,7 @@ arrive already altered.
 
 | Field | Where it comes from | Quality |
 |---|---|---|
-| `byte_length`, `content_hash`, `is_empty`, `terminates_cleanly`, `is_round_number` | the log item's `content` | as elsewhere, with the caveat above |
+| `byte_length`, `content_hash`, `is_empty`, `terminates_cleanly`, `is_round_number` | the joined history message where there is one, the log item's `content` where there is not | good on the first, a measurement of the UI's cut on the second — record which, per Decision 1 |
 | `has_error_field` | only `type == "error"` on the item itself | there is no per-result error flag — see below |
 | `duration_ms` | nothing records it | see below |
 | `exit_code` | never recorded | leave null |
@@ -510,10 +564,14 @@ first where deciding *what the transcript is* takes an argument.
   `usr/chats/<id>/{messages,images,screenshots}/` and referenced by path, but
   `RawMessage` content in the history can carry inline base64. As with pi, name
   non-text items rather than inlining them, or every shape record on those events
-  measures base64.
-- **File size.** A chat is one JSON object holding up to 1000 items of up to
-  15000 chars plus a full history. `json.load` of a 30MB file is fine; a
-  streaming parse is not available for this format if it turns out not to be.
+  measures base64. Note that `trim_embeds` only *shadows* an embed with
+  `set_summary("embedded data removed")`, so every screenshot a session ever took
+  is still in the file long after the model stopped seeing it.
+- **File size.** A chat is one JSON object holding up to 1000 log items of up to
+  15000 chars, plus a history that keeps the full text of everything it ever
+  shadowed, base64 included. `json.load` of a 30MB file is fine; whether these
+  reach a size where that stops being true is unmeasured, and no streaming parse
+  is available for this format if it does.
 - **Chat branching** (`plugins/_chat_branching`) copies a chat into a *new*
   context truncated at a cut point, rather than branching in place as pi does. So
   there is no tree to walk — but there are two sessions on disk sharing a
