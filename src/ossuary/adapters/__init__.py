@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..models import Source
+from .agent_zero import AgentZeroAdapter
 from .base import Adapter
 from .claude_code import ClaudeCodeAdapter
 from .codex import CodexAdapter
@@ -16,6 +17,7 @@ _ADAPTERS: dict[str, type[Adapter]] = {
     "codex": CodexAdapter,
     "copilot": CopilotAdapter,
     "pi": PiAdapter,
+    "agent-zero": AgentZeroAdapter,
 }
 
 ALL_SOURCES: tuple[str, ...] = tuple(_ADAPTERS)
@@ -41,6 +43,7 @@ __all__ = [
     "CodexAdapter",
     "CopilotAdapter",
     "PiAdapter",
+    "AgentZeroAdapter",
     "ALL_SOURCES",
     "get_adapter",
     "all_adapters",

@@ -1,0 +1,59 @@
+{
+ "id": "ctx-golden-0002",
+ "name": "Flaky timezone test",
+ "created_at": "2026-08-16T10:00:00.000000+02:00",
+ "type": "user",
+ "last_message": "2026-08-16T10:50:12.000000+02:00",
+ "agents": [
+  {
+   "number": 0,
+   "agent_profile": "default",
+   "data": {},
+   "history": "{\"_cls\": \"History\", \"counter\": 3, \"bulks\": [], \"topics\": [], \"current\": {\"_cls\": \"Topic\", \"summary\": \"\", \"messages\": [{\"_cls\": \"Message\", \"id\": \"msg-0201\", \"ai\": false, \"content\": {\"system_message\": \"\", \"user_message\": \"why is test_tz flaky?\", \"attachments\": []}, \"metadata\": {}, \"sequence\": 1, \"summary\": \"\", \"tokens\": 11}, {\"_cls\": \"Message\", \"id\": \"msg-0202\", \"ai\": false, \"content\": {\"tool_name\": \"code_execution_tool\", \"tool_result\": \"FAILED tests/test_tz.py::test_dst - assert 1 == 2\\n\"}, \"metadata\": {}, \"sequence\": 2, \"summary\": \"\", \"tokens\": 22}, {\"_cls\": \"Message\", \"id\": \"msg-0203\", \"ai\": true, \"content\": \"It fails only across a DST boundary.\", \"metadata\": {}, \"sequence\": 3, \"summary\": \"\", \"tokens\": 10}]}}"
+  }
+ ],
+ "streaming_agent": 0,
+ "agent_profile": "default",
+ "log": {
+  "guid": "11111111-2222-3333-4444-555555555555",
+  "logs": [
+   {
+    "no": 0,
+    "id": "msg-0201",
+    "type": "user",
+    "heading": "User message",
+    "content": "why is test_tz flaky?",
+    "kvps": {},
+    "timestamp": 1787043000.0,
+    "agentno": 0
+   },
+   {
+    "no": 1,
+    "id": "msg-0202",
+    "type": "code_exe",
+    "heading": "icon://terminal code_execution_tool - terminal",
+    "content": "FAILED tests/test_tz.py::test_dst - assert 1 == 2\n",
+    "kvps": {
+     "runtime": "terminal",
+     "code": "pytest tests/test_tz.py"
+    },
+    "timestamp": 1787043006.0,
+    "agentno": 0
+   },
+   {
+    "no": 2,
+    "id": "msg-0203",
+    "type": "response",
+    "heading": "A0: Responding",
+    "content": "It fails only across a DST boundary.",
+    "kvps": {},
+    "timestamp": 1787043012.0,
+    "agentno": 0
+   }
+  ],
+  "progress": "A0: Responding",
+  "progress_no": 2
+ },
+ "data": {},
+ "output_data": {}
+}

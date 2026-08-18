@@ -141,6 +141,12 @@ def _preview(event: NormalizedEvent, preview_chars: int) -> str:
     """
     source = event.text if event.text else (event.raw or "")
     collapsed = " ".join(source.split())
+    # One source interleaves a chain of agents into a single event stream, with
+    # only a number to tell them apart. Reading a subordinate's tool call as the
+    # top-level agent's is not a small error, so the number leads the preview.
+    agent_no = event.meta.get("agent_no")
+    if isinstance(agent_no, int) and agent_no:
+        collapsed = f"A{agent_no}: {collapsed}"
     if len(collapsed) <= preview_chars:
         return collapsed
     return collapsed[: preview_chars - 1] + "…"
@@ -176,6 +182,22 @@ def _legend(session: Session) -> str:
             "often has no text at all, so without the flag it reads as a turn "
             "that simply produced nothing. Where the CLI also recorded an error "
             "message it is on the next row, in the CLI's own words."
+        )
+    if any(e.meta.get("agent_no") for e in session.events):
+        lines.append(
+            "Previews beginning `A1:` (or higher) are events emitted by a "
+            "subordinate agent this session spawned, not by the agent the user "
+            "was talking to. They share one event stream and are distinguished "
+            "only by that number."
+        )
+    if any(e.meta.get("from_history") for e in session.events):
+        lines.append(
+            "Rows with no time at the end of the session come from this CLI's "
+            "second record -- the message history it hands the model, which "
+            "carries an ordering but no clock. They are events the timestamped "
+            "log never held or has since dropped, plus the summaries that now "
+            "stand in for text the model was shown earlier. Where a summary "
+            "replaced messages outright, a row says how many."
         )
     if any(e.meta.get("off_path") for e in session.events):
         lines.append(

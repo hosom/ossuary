@@ -1,0 +1,36 @@
+{
+ "id": "ctx-golden-0002",
+ "name": "Flaky timezone test",
+ "created_at": "2026-08-16T10:00:00.000000+02:00",
+ "type": "user",
+ "last_message": "2026-08-16T11:06:40.000000+02:00",
+ "agents": [
+  {
+   "number": 0,
+   "agent_profile": "default",
+   "data": {},
+   "history": "{\"_cls\": \"History\", \"counter\": 1, \"bulks\": [], \"topics\": [], \"current\": {\"_cls\": \"Topic\", \"summary\": \"\", \"messages\": [{\"_cls\": \"Message\", \"id\": \"c0000000-0000-4000-8000-000000000000\", \"ai\": true, \"content\": \"## Context compacted\\n\\nThe agent investigated a flaky test.\", \"metadata\": {}, \"sequence\": 1, \"summary\": \"\", \"tokens\": 18}]}}"
+  }
+ ],
+ "streaming_agent": 0,
+ "agent_profile": "default",
+ "log": {
+  "guid": "11111111-2222-3333-4444-555555555555",
+  "logs": [
+   {
+    "no": 0,
+    "id": null,
+    "type": "response",
+    "heading": "Context compacted",
+    "content": "## Context compacted\n\nThe agent investigated a flaky test and found a timezone bug.\n\n---\n*Pre-compaction backup of the full original conversation:*\n- `/a0/usr/chats/ctx-golden-0002/backups/pre-compact-20260816-1100.txt`",
+    "kvps": {},
+    "timestamp": 1787044000.0,
+    "agentno": 0
+   }
+  ],
+  "progress": "Context compacted",
+  "progress_no": 0
+ },
+ "data": {},
+ "output_data": {}
+}

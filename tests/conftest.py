@@ -15,6 +15,7 @@ COPILOT_CLI_ROOT = GOLDEN / "copilot" / "session-state"
 COPILOT_VSCODE_ROOT = GOLDEN / "copilot" / "vscode"
 PI_ROOT = GOLDEN / "pi" / "sessions"
 PI_LEGACY_ROOT = GOLDEN / "pi" / "legacy"
+AGENT_ZERO_ROOT = GOLDEN / "agent-zero" / "chats"
 
 
 def _parse_one(source: str, root: Path) -> Session:
@@ -52,6 +53,29 @@ def pi_session() -> Session:
 @pytest.fixture
 def pi_legacy_session() -> Session:
     return _parse_one("pi", PI_LEGACY_ROOT)
+
+
+def _parse_named(source: str, root: Path, session_id: str) -> Session:
+    adapter = get_adapter(source, roots=[root])
+    ref = next(r for r in adapter.discover([root]) if r.session_id == session_id)
+    return adapter.parse(ref)
+
+
+@pytest.fixture
+def agent_zero_session() -> Session:
+    return _parse_named("agent-zero", AGENT_ZERO_ROOT, "ctx-golden-0001")
+
+
+@pytest.fixture
+def agent_zero_compacted_session() -> Session:
+    return _parse_named("agent-zero", AGENT_ZERO_ROOT, "ctx-golden-0002")
+
+
+@pytest.fixture
+def agent_zero_backup_session() -> Session:
+    return _parse_named(
+        "agent-zero", AGENT_ZERO_ROOT, "ctx-golden-0002@pre-compact-20260816-105012"
+    )
 
 
 @pytest.fixture
