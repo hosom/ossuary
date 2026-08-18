@@ -92,13 +92,29 @@ found nothing.
 The CLI is the deterministic surface around that — nothing here calls a model:
 
 ```bash
-ossuary sources [PATHS...] [--source claude-code|codex|copilot|pi]
+ossuary sources [PATHS...] [--source claude-code|codex|copilot|pi|agent-zero]
 ossuary outline <session-id|path>          # one session, by hand
 ossuary report [--open/--no-open] [--out report.html]
 ossuary taxonomy [--show/--clear]
 ossuary export --out issues.jsonl
 ossuary-mcp                                # the MCP server, for wiring up by hand
 ```
+
+Claude Code, Codex, Copilot and pi are found on their own — they keep sessions in
+a known place under `$HOME`. **Agent Zero is not.** It computes its data
+directory from wherever it was installed, offers no environment override, and its
+documented install keeps chats in a Docker volume:
+
+```bash
+ossuary sources /path/to/agent-zero/usr/chats     # a source checkout, or a bind mount
+export OSSUARY_AGENT_ZERO_DIR=/path/to/usr/chats  # or say it once
+
+# the documented install (`docker run -v a0_usr:/a0/usr`) keeps them in a volume
+docker cp <container>:/a0/usr/chats ./az-chats && ossuary sources ./az-chats
+```
+
+Pre-compaction backups are read alongside the live chat, because `/compact`
+writes one and then empties the chat it was cut from.
 
 ## Tests
 

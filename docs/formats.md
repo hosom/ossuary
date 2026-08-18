@@ -284,6 +284,130 @@ be:
 
 ---
 
+## Agent Zero — derived from source, not observed
+
+No Agent Zero install existed on the machine this was written on, so this is the
+same evidence class as Codex: read out of the source at `agent0ai/agent-zero`,
+`main` as of 2026-08-12. `docs/agent-zero-investigation.md` is the full study,
+including the parts that were investigated and not built.
+
+**Layout**
+
+```
+<agent-zero-root>/usr/chats/<context-id>/chat.json
+<agent-zero-root>/usr/chats/<context-id>/backups/pre-compact-<YYYYmmdd-HHMMSS>.json
+```
+
+`<agent-zero-root>` is the directory Agent Zero was installed into — `/a0` in the
+official image. **There is no `~/.agent-zero` and no environment override**, and
+the documented install (`docker run -v a0_usr:/a0/usr`) puts chats in a named
+Docker volume, which is a host path on Linux and inside the VM on macOS and
+Windows. So `OSSUARY_AGENT_ZERO_DIR` is Ossuary's own variable, the two other
+default roots are what a source checkout produces, and everything else is an
+explicit path. This is the only source Ossuary cannot find on its own, and the
+README says so rather than the adapter guessing.
+
+Backups are discovered alongside the live chat: `/compact` writes a full export
+there and *then* empties the chat, so a compacted session is otherwise invisible.
+Both files carry the same `id`, so the session id comes from the path
+(`<ctxid>@pre-compact-<ts>`) and the file's own id is recorded as `context_id`.
+
+**One JSON object, holding two records of the same session**
+
+| | `log` | `agents[].history` |
+|---|---|---|
+| Order | chronological, epoch-second timestamps | `sequence`, no timestamps at all |
+| Payload | a display copy, cut at 15000 chars | what the model was given |
+| Loses | everything past the last 1000 items | only what attention compression deleted |
+
+Neither contains the other, so the adapter reads both: the log is the event
+stream, and the history joins onto it by `LogItem.id` — which Agent Zero passes
+as the history message id at every site that writes both. The join supplies the
+payload text and the shape record wherever it reaches, and `payload_source` on
+the event says which record was measured. Reading the log copy instead would put
+Agent Zero's 15000-character UI limit into `ossuary_tool_stats` as though it were
+a tool's own behaviour.
+
+**The log is never complete.** `_update_item` truncates on the way *in*, so no
+full copy exists even in Agent Zero's memory, and `_serialize_log` writes
+`log.logs[-1000:]`. The `no` field is the item's ordinal as written, so a first
+item numbered 812 proves 812 are gone — but `_deserialize_log` renumbers from
+zero when a chat is loaded, so a zero first ordinal is not proof of
+completeness. The synthetic notice event says both halves of that.
+
+**Item types**
+
+| `type` | → | Notes |
+|---|---|---|
+| `user`, `response` | `message` | |
+| `agent` | `thinking` + `message` | one LLM turn; `kvps.reasoning` is the provider's reasoning stream as text, which no other supported source persists |
+| `tool`, `code_exe`, `browser`, `mcp`, `subagent` | `tool_call` + `tool_result` | one item, both halves |
+| `error`, `warning`, `hint`, `info`, `progress`, `input`, `util` | `meta` | the type leads the text, because a `meta` row shows nothing else |
+
+`kvps.tool_name` on an `agent` item is the tool the model *decided* to call. The
+record of the call is the tool item that follows, so that is `intended_tool` in
+`meta` rather than a second `tool_call` event that would double-count every call
+in the corpus statistics.
+
+**Tool names.** Most tools put `_tool_name` in `kvps` and MCP tools put
+`tool_name` there. The six that override `get_log_object()` — code execution,
+browser, subordinate, skills, wait, office — record it only inside the heading
+string, and the history message's `tool_name` field. The history answers it where
+the join reaches; where nothing does, the item's own type becomes an explicitly
+bracketed bucket (`<code_exe>`), which is true, rather than a specific tool name
+that might not be the one that ran.
+
+**Subordinate agents share the log.** `call_subordinate` spawns a chain that all
+writes to the same list with only `agentno` (spelled `agent_number` in older
+files) to tell them apart. Non-zero values go in `meta` and lead the outline's
+preview column as `A1:`.
+
+### Discrepancy: no durations and no exit codes, ever
+
+The tool item's `timestamp` is stamped when the item is created and
+`_update_item` never touches it, so the only available estimate is the gap to
+whatever the harness logged next — which is not when the tool returned. That is
+weaker than the derived durations elsewhere in the corpus, which at least span a
+call line and its result line, so `duration_ms` stays null rather than putting a
+number in a column that would be read as a measurement of the tool.
+
+The code execution tool retrieves an exit code when its shell dies and renders it
+into a framework sentence (`fw.code.shell_exit.md` → `" with exit code 1"`).
+Recovering it means matching prose that changes between releases, and a wrong
+parse is indistinguishable from a recorded one. `exit_code` stays null. There is
+also no per-result error flag anywhere in the format: failures are separate
+`error` items, which appear as their own rows.
+
+### Three truncation markers, three different claims
+
+| Marker | Written by | Means |
+|---|---|---|
+| `<< N Characters hidden >>` | `helpers/log.py` | the *display* copy was cut. The model saw the whole thing. |
+| `<< N CHARACTERS REMOVED TO SAVE SPACE >>` | `prompts/fw.msg_truncated.md` | the *payload* was cut before the model saw it |
+| `[[ossuary:elided N of M bytes]]` | Ossuary | we cut it, on the way to the agent |
+
+None is ever stripped, and the first two are recorded numerically in `meta`
+(`log_truncation`, `payload_truncation`) so "this payload looks capped" becomes
+"this payload was capped, by this much, by that limit".
+
+### The history's own losses
+
+Most of Agent Zero's history compression is additive: `set_summary()` fills a
+field and `to_dict` writes `content` *and* `summary`, topics rolled into a bulk
+survive as its records, and `trim_embeds` leaves dropped screenshots' base64 in
+the file forever. Those become `shadowed_by_summary` in `meta` on an event that
+still carries the original text.
+
+`Topic.compress_attention` is the exception and the only routine path that
+deletes: it replaces a run of middle messages with one summary message built
+without a sequence number. The gap it leaves in `sequence` gives the count
+exactly, and a `meta` event records it. Because that inserted summary carries
+sequence 0, history events are emitted in *walk* order rather than sequence
+order — sorting by sequence would file it at the start of the conversation
+instead of where it stands.
+
+---
+
 ## What to do when a format changes
 
 1. Add a fixture to `tests/golden/` showing the new shape.

@@ -4,9 +4,13 @@ This is the study behind a possible fifth source, written to the same standard a
 [`formats.md`](formats.md) and [`pi-investigation.md`](pi-investigation.md): what
 was verified, what was derived from source, and what is still unknown.
 
-**Nothing has shipped.** No adapter exists yet. This document exists so the
-decision to write one — and the three decisions that have to be made *before* it
-is written — can be made from evidence rather than from a guess.
+**The adapter shipped.** `adapters/agent_zero.py` and the format record in
+[`formats.md`](formats.md) are the result, and this document is kept as the
+reasoning behind them. It was written first, to make the three decisions below
+from evidence rather than inside the code; all three were taken as recommended:
+the log is the event stream with the history joined onto it, subordinate agents
+are marked in the outline, and discovery asks rather than guesses. What is still
+not built is Agent Zero as a *host* — see the last section.
 
 Verified date: 2026-08-18, against `agent0ai/agent-zero` (also published as
 `frdel/agent-zero`) at commit `baadd0d`, `main` as of 2026-08-12, which the docs
@@ -529,7 +533,7 @@ one item.
 
 | Change | Size |
 |---|---|
-| `src/ossuary/adapters/agent_zero.py` | ~600–700 lines; closest sibling is `copilot.py` (single-JSON parsing), but the log/history join makes it the largest adapter |
+| `src/ossuary/adapters/agent_zero.py` | estimated ~600–700 lines; came out at ~1270, comments included. The join, the two record types and the loss accounting are each small; there are just more of them than in any other adapter |
 | `Source` literal in `models.py`, registry in `adapters/__init__.py` | 2 lines |
 | `tests/golden/agent-zero/…` fixtures | half generated, half hand-written, then damaged |
 | `tests/test_adapters_agent_zero.py`, `conftest.py` fixtures | ~200 lines |
@@ -596,3 +600,28 @@ source, and mixing a fifth format into the corpus is a gain rather than a
 compromise. Agent Zero's 15000-char display cap and 1000-item log cap become
 visible next to Claude Code's 30000 bytes and pi's 51200, which is exactly the
 comparison no single session can show.
+
+---
+
+## What shipped, against what this document recommended
+
+| Recommendation | As built |
+|---|---|
+| Log is the event stream, history joined by `LogItem.id` | Yes. `payload_source` on every event says which record was measured. |
+| Payload text and shape from the history where the join reaches | Yes. The golden fixture asserts a result measured at 21775 bytes whose log copy was cut to 15000. |
+| Tool name from the history, never from the heading | Yes, falling back to `_tool_name`/`tool_name` in `kvps`, then to a bracketed `<code_exe>`-style bucket. |
+| Subordinate agents surfaced, not just recorded | `agent_no` in `meta`, an `A1:` prefix leading the outline preview, and a legend line that only appears for sessions that delegated. No new flag letter. |
+| `duration_ms` null, `next_item_gap_ms` in `meta` | Duration is null. The gap was dropped entirely — computing a number nothing would read, to sit in a field nothing renders, is not worth the line. |
+| Discovery: env var, two checkout paths, explicit paths otherwise | Yes, plus `backups/*.json` alongside every `chat.json`. |
+| Emit history messages the log no longer has | Yes, as a trailing undated block in walk order. |
+
+Two things the investigation did not anticipate, both found while building:
+
+- **History events must be emitted in walk order, not `sequence` order.** The
+  summary `compress_attention` inserts is constructed without a sequence number
+  and carries 0, so sorting by sequence files it at the very start of the
+  conversation instead of where the messages it replaced used to be.
+- **A compacted chat holds its summary twice.** The compactor writes it into the
+  log with no id and into a fresh history whose message gets a new uuid, so
+  nothing joins them. Both are emitted — one with the time it happened, one
+  without — because that is what is in the file.
