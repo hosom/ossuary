@@ -1,4 +1,4 @@
-# Harness
+# Charon
 
 **Status: design proposal. Nothing in this document is implemented.**
 
@@ -8,6 +8,13 @@ itself, rather than archaeology on sessions somebody else's harness wrote down.
 The answer proposed here is yes to the direction and no to the pivot: build the
 harness as a new layer that *emits* the record Ossuary already analyzes, and
 leave the analysis core exactly as model-free as it is today.
+
+The harness is named **Charon**: it ferries sessions across, and the ossuary
+keeps the bones. The name is shared with unrelated projects in other domains —
+a Rust verification tool, an SSO project, an abandoned 2011 HAProxy package
+that holds the bare `charon` name on PyPI — but nothing in the agent-harness or
+agent-observability space uses it, and the packaging below never needs the bare
+PyPI name anyway.
 
 ## Why a harness at all
 
@@ -81,8 +88,7 @@ architecture for audience B.
 
 The resolution is to keep both paths, at honestly different guarantee levels:
 
-- The **harness** emits the session log natively, with a completeness
-  guarantee.
+- **Charon** emits the session log natively, with a completeness guarantee.
 - The **existing plugins** gain a best-effort hook-based emitter of the same
   format — clawback-style capture for people who will not leave their harness,
   labeled as best-effort because that is what hook-based capture is.
@@ -92,7 +98,7 @@ become the on-ramp.
 
 ## The session log
 
-Every harness session writes an append-only JSONL log: one file per session,
+Every Charon session writes an append-only JSONL log: one file per session,
 each line a `NormalizedEvent` (or a superset that projects onto one). The log
 is the forensic record, so it carries the same invariants the rest of the
 codebase does, plus verifiability. Four tensions are load-bearing and need
@@ -130,7 +136,7 @@ way to know it ever held anything.
 ## Agents as config
 
 Agents are defined declaratively — name, model, system prompt, toolset, MCP
-servers — and the harness constructs them from that config. This is the part
+servers — and Charon constructs them from that config. This is the part
 that pays for everything else, because it changes what the corpus statistics
 mean. Today the analytics answer *what went wrong in my sessions*. Clustered on
 agents, they answer *which agent configuration is degrading* — fleet health
@@ -143,7 +149,7 @@ agent name.** A session header carries:
 |---|---|
 | agent name | The human-facing cluster key |
 | config content hash | The name lies the moment the config is edited |
-| harness version | The emitter is part of the experiment |
+| Charon version | The emitter is part of the experiment |
 | resolved model id | "Same agent, new model" is a different population |
 
 Tag only by name and every cluster silently mixes behavior from before and
@@ -156,12 +162,15 @@ tool can currently say.
 ## Packaging
 
 The analysis core stays exactly as principled as it is: model-free, no provider
-SDK, deterministic. The harness lives in an optional extra (`ossuary[harness]`)
-or a sibling package that depends on the core. The README's "Ossuary does not
-bring its own model" remains true of the analysis layer — the harness *brings
-sessions to* the analyzer; it does not put inference inside it. The design
-decision flagged as worth not undoing survives intact, because this adds an
-emitter rather than undoing anything.
+SDK, deterministic. Charon lives in an optional extra — `ossuary[charon]`,
+imported as `ossuary.charon` — rather than a standalone distribution. That is
+the right shape architecturally, and it also sidesteps the fact that the bare
+`charon` name on PyPI is held by an abandoned 2011 package: no separate
+distribution, no name to claim. The README's "Ossuary does not bring its own
+model" remains true of the analysis layer — Charon *brings sessions to* the
+analyzer; it does not put inference inside it. The design decision flagged as
+worth not undoing survives intact, because this adds an emitter rather than
+undoing anything.
 
 ## Non-goals
 
