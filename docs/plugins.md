@@ -68,7 +68,7 @@ claude --plugin-dir ./plugins/claude-code/ossuary
 
 | Component | What it does |
 | --- | --- |
-| `.mcp.json` | Starts `ossuary-mcp` via `uvx --from ${CLAUDE_PLUGIN_ROOT}/../../..` — the bundled repo, no network |
+| `.mcp.json` | Starts `ossuary-mcp` via `uv run --project ${CLAUDE_PLUGIN_ROOT}/../../..` — the bundled checkout |
 | `skills/investigate` | Model-invoked. The method: read the outline in full, follow the shapes, check corpus stats before calling a tool abnormal |
 | `/ossuary:report` | Renders HTML from recorded findings; no inference |
 | `agents/session-investigator` | Read tools plus `report_issue`, nothing else — one spawned per session, so each transcript gets its own context window |
@@ -76,11 +76,40 @@ claude --plugin-dir ./plugins/claude-code/ossuary
 ## Copilot CLI
 
 ```bash
-copilot plugin install --path ./plugins/copilot/ossuary
+copilot plugin install hosom/ossuary:plugins/copilot/ossuary
+export OSSUARY_PROJECT=/absolute/path/to/ossuary
+copilot
 ```
 
 Same MCP server, same method, in Copilot's plugin format: a
 `session-investigator` custom agent and an `investigate` skill.
+
+Copilot's subdirectory install copies only the plugin, not the Python project
+three directories above it. The plugin's `launch.py` runs
+`uv run --project "$OSSUARY_PROJECT" ossuary-mcp`; set that variable in the
+environment that starts Copilot (for example in your shell profile). The launcher
+requires `python3` and `uv`, fails explicitly for a missing checkout, and does not
+fetch an unrelated package or guess a cache directory. Without an override it
+uses the surrounding checkout, supporting local development:
+
+```bash
+copilot --plugin-dir ./plugins/copilot/ossuary
+```
+
+The custom agent grants exactly six tools, qualified as `ossuary/<tool-name>`.
+Bare names do not resolve to Copilot MCP tools and silently produce an agent
+with no tools. Restart Copilot after updating: a successful standalone MCP
+handshake does not refresh an existing host session's server or agent grants.
+
+Outlines are paged through MCP, at most 40 events at a time. Investigators follow
+the next `start` until `End of outline.` before inspecting individual events.
+This keeps them independent without granting filesystem access just to read
+host-generated overflow files. Event reads also have an approximately 8 KB
+response budget; follow their continuation markers, and use event slices for
+elided payloads. Search responses also page with `start` and bound oversized
+match excerpts with explicit elision markers. The CLI's `ossuary outline` still prints the complete outline.
+Session discovery is paged and ordered by UTC modification time, not creation
+time, so coordinators can choose recent sessions without another history source.
 
 ## The MCP server
 
@@ -91,8 +120,8 @@ elided on the way out:
 
 | Tool | |
 | --- | --- |
-| `ossuary_sources` | List every transcript found on this machine |
-| `ossuary_outline` | Every event in one session at low resolution |
+| `ossuary_sources` | Page through transcripts, newest-modified first |
+| `ossuary_outline` | Page through every event in one session at low resolution |
 | `ossuary_read_events` | Full events by index range, ≤40 per call |
 | `ossuary_search_session` | Regex search within one session |
 | `ossuary_read_event_slice` | One oversized payload, by byte offset |
@@ -133,19 +162,20 @@ or add it to a project's `.mcp.json` directly.
 
 ### Why the manifests point at a path
 
-Neither plugin fetches anything. `${CLAUDE_PLUGIN_ROOT}` is the plugin's own
-directory, and both plugins ship inside the repository that provides the
-package, so `../../..` from there is the project itself — whether you loaded it
-with `--plugin-dir` from a working copy or installed it from the marketplace,
-which clones the same repository.
+Both plugins run a source checkout. `${CLAUDE_PLUGIN_ROOT}` is the Claude Code
+plugin's directory, and `../../..` resolves to the project in its bundled
+repository. Copilot's copied subdirectory installs instead use the explicit
+`OSSUARY_PROJECT` checkout described above. Neither launcher installs Ossuary
+from PyPI or from a moving Git branch; `uv run` may still download dependencies
+when synchronizing the checkout's environment.
 
 The two alternatives were tried and both shipped broken. A bare `ossuary`
 installs an unrelated PyPI project of that name (a dice analysis toolkit), and a
 `git+` URL to the default branch installs whatever that branch happens to
 contain, which is not necessarily this package. In both cases the only symptom
 is a plugin whose tools never appear, and a JSON-RPC error with no detail.
-`tests/test_plugins.py` now resolves the source and checks it lands on a
-pyproject declaring the entry point the manifest goes on to run.
+`tests/test_plugins.py` checks the bundled source and simulates a copied Copilot
+install, including the configured-checkout and missing-checkout cases.
 
 ### Why `uv run --project` and not `uvx --from`
 

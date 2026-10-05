@@ -1,4 +1,4 @@
-"""Adapters for the two sources with no data on this machine.
+"""Codex, legacy Copilot, and current Copilot CLI regression cases.
 
 These fixtures are built to the documented/​source-derived schema, so they prove
 the adapters' behaviour, not the schema's accuracy. Where a fixture and a real
@@ -7,6 +7,12 @@ file disagree, the real file wins and the adapter is the thing that changes.
 
 from __future__ import annotations
 
+import json
+
+import pytest
+
+from ossuary.adapters import get_adapter
+from ossuary.aggregate import compute_tool_stats
 from ossuary.models import Session
 
 
@@ -95,6 +101,99 @@ class TestCopilotCli:
         result = next(e for e in copilot_cli_session.events if e.kind == "tool_result")
         assert result.tool_name == "bash"
         assert "call_event_index" in result.meta
+
+
+class TestCurrentCopilotCli:
+    @staticmethod
+    def parse(tmp_path, records):
+        root = tmp_path / "current-session"
+        root.mkdir()
+        (root / "events.jsonl").write_text(
+            "\n".join(json.dumps(record) for record in records), encoding="utf-8",
+        )
+        adapter = get_adapter("copilot")
+        return adapter.parse(adapter.discover([root])[0])
+
+    def test_dotted_events_pair_out_of_order_results_and_measure_payloads(self, tmp_path):
+        session = self.parse(tmp_path, [
+            {"type": "session.start", "data": {"sessionId": "current-session"}},
+            {"type": "user.message", "data": {"content": "Run the checks"}},
+            {"type": "system.message", "data": {"content": "Use the local checkout"}},
+            {"type": "assistant.message", "data": {
+                "content": "Checking", "toolRequests": [{"toolCallId": "a", "name": "bash"}],
+            }},
+            {"type": "tool.execution_start", "id": "event-a", "parentId": "previous",
+             "timestamp": "2026-10-05T13:00:00Z",
+             "data": {"toolCallId": "a", "toolName": "bash", "arguments": {"command": "check"}}},
+            {"type": "tool.execution_start", "timestamp": "2026-10-05T13:00:01Z",
+             "data": {"toolCallId": "b", "toolName": "view", "arguments": {"path": "README.md"}}},
+            {"type": "tool.execution_complete", "timestamp": "2026-10-05T13:00:02Z",
+             "data": {"toolCallId": "b", "success": True, "result": {"content": "readme\n"}}},
+            {"type": "tool.execution_complete", "timestamp": "2026-10-05T13:00:03Z",
+             "data": {"toolCallId": "a", "success": True, "result": {"content": ""},
+                      "shellExecution": {"exitCode": 0},
+                      "toolTelemetry": {"metrics": {"commandTimeout": 30000}}}},
+            {"type": "assistant.turn_end", "data": {"turnId": "0"}},
+            {"type": "model.model_call_success", "data": {"responseChunk": {"text": "Checking"}}},
+        ])
+        assert session.parse_error_count == 0
+        assert [e.role for e in session.events[1:4]] == ["user", "system", "assistant"]
+        assert session.events[1].text == "Run the checks"
+        assert session.events[3].text == "Checking"
+        assert len([e for e in session.events if e.kind == "tool_call"]) == 2
+        assert session.events[4].meta["event_id"] == "event-a"
+        view, bash = session.events[6:8]
+        assert (view.tool_name, view.meta["call_event_index"], view.text) == ("view", 5, "readme\n")
+        assert view.shape.byte_length == len(b"readme\n")
+        assert bash.tool_name == "bash" and bash.meta["call_event_index"] == 4
+        assert bash.shape.is_empty and bash.shape.byte_length == 0
+        assert bash.shape.exit_code == 0 and not bash.shape.has_error_field
+        assert (bash.shape.duration_ms, bash.shape.duration_source) == (3000, "derived")
+        assert session.events[-1].kind == "meta", "telemetry must not duplicate assistant messages"
+        stats = {s.tool_name: s for s in compute_tool_stats([session])}
+        assert stats["bash"].call_count == 1 and stats["bash"].empty_count == 1
+        assert stats["view"].byte_length_max == len(b"readme\n")
+
+    @pytest.mark.parametrize("result,error,expected", [
+        ({"content": "failed"}, None, "failed"),
+        (None, {"message": "Permission denied"}, '{"message": "Permission denied"}'),
+    ])
+    def test_failed_orphan_results_preserve_error_without_fabricating_exit_code(
+        self, tmp_path, result, error, expected,
+    ):
+        session = self.parse(tmp_path, [{
+            "type": "tool.execution_complete",
+            "data": {"toolCallId": "missing", "success": False, "result": result,
+                     "error": error, "durationMs": 12},
+        }])
+        event = session.events[0]
+        assert event.text == expected and event.meta["orphan_result"]
+        assert event.shape.has_error_field and event.shape.exit_code is None
+        assert (event.shape.duration_ms, event.shape.duration_source) == (12, "recorded")
+
+    def test_progress_is_not_a_result_and_unknown_types_are_counted(self, tmp_path):
+        session = self.parse(tmp_path, [
+            {"type": "tool.execution_partial_result", "data": {"toolCallId": "a", "content": "partial"}},
+            {"type": "future.new_event", "data": {"detail": "preserve me"}},
+        ])
+        assert session.events[0].kind == "meta" and session.events[0].shape is None
+        assert not session.events[0].parse_error
+        assert session.parse_error_count == 1
+        assert session.events[1].parse_error and "preserve me" in session.events[1].text
+
+    def test_lifecycle_events_preserve_aborts_and_errors(self, tmp_path):
+        session = self.parse(tmp_path, [
+            {"type": "skill.invoked", "data": {"name": "investigate"}},
+            {"type": "session.context_changed", "data": {"cwd": "/project"}},
+            {"type": "system.notification", "data": {"content": "Background work finished"}},
+            {"type": "abort", "data": {"reason": "User cancelled"}},
+            {"type": "session.error", "data": {"message": "Connection failed"}},
+        ])
+        assert session.parse_error_count == 0
+        assert all(e.kind == "meta" for e in session.events)
+        assert session.events[3].meta["stop_reason"] == "aborted"
+        assert session.events[4].meta["stop_reason"] == "error"
+        assert "User cancelled" in session.events[3].text
 
 
 class TestCopilotVsCode:

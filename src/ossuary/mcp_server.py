@@ -37,7 +37,7 @@ from typing import Any
 
 from .adapters import ALL_SOURCES
 from .aggregate import compute_tool_stats, corpus_event_count, render_tool_stats
-from .models import Issue, ProposedCluster, RunManifest, SessionScan, StoredIssue, ToolStats
+from .models import Issue, ProposedCluster, RunManifest, SessionRef, SessionScan, StoredIssue, ToolStats
 from .pipeline import (
     artifact_dir,
     corpus_summary,
@@ -55,6 +55,8 @@ SERVER_NAME = "ossuary"
 #: Same ceiling as the scanner's own tool. One call must not be able to consume
 #: the host agent's whole context window.
 MAX_EVENT_SPAN = 40
+MAX_OUTLINE_SPAN = 40
+MAX_READ_BYTES = 8000
 
 
 @dataclass
@@ -76,6 +78,7 @@ class _State:
         self.redact = redact
         self.loaded = False
         self.stats: list[ToolStats] = []
+        self.refs: dict[str, SessionRef] = {}
         self.run = _Run()
 
     def ensure_loaded(self) -> None:
@@ -83,7 +86,8 @@ class _State:
             return
         for ref in self.store.discover(list(ALL_SOURCES), roots=self.roots):
             try:
-                self.store.load(ref)
+                session = self.store.load(ref)
+                self.refs[session.session_id] = ref
             except Exception:  # noqa: BLE001 - one bad file must not end discovery
                 continue
         self.stats = compute_tool_stats(self.store.sessions)
@@ -213,22 +217,33 @@ def build_server(roots: list[Path] | None = None, *, redact: bool = True) -> Any
     _stamp_version(mcp)
 
     @mcp.tool()
-    def ossuary_sources() -> str:
+    def ossuary_sources(start: int = 0, limit: int = 20) -> str:
         """List the agent session transcripts Ossuary found on this machine.
 
-        Start here. Returns one row per session with the id to pass to the other
-        tools, its source CLI, event count, and last-modified time.
+        Start here. Returns up to 40 sessions per page, newest-modified first,
+        with ids, source CLIs, event counts and UTC last-modified times. Follow
+        the next `start` for more; modification time is not creation time.
         """
         state.ensure_loaded()
-        sessions = state.store.sessions
+        def modified(session_id: str) -> datetime:
+            value = state.refs[session_id].mtime
+            return value.astimezone(timezone.utc) if value else datetime.min.replace(tzinfo=timezone.utc)
+
+        sessions = sorted(
+            state.store.sessions, key=lambda s: (modified(s.session_id), s.session_id),
+            reverse=True,
+        )
+        if start < 0 or start > len(sessions) or limit < 1:
+            raise ValueError("start must be within the session list and limit must be positive")
         if not sessions:
             return (
                 "No sessions found. Ossuary looks under the default transcript "
                 "directories for Claude Code, Codex, and Copilot; pass explicit "
                 "roots when starting the server to look elsewhere."
             )
-        lines = [f"{len(sessions)} session(s):", ""]
-        for session in sessions:
+        end = min(start + min(limit, 40), len(sessions))
+        lines = [f"{len(sessions)} session(s), showing [{start}, {end}):", ""]
+        for session in sessions[start:end]:
             degraded = (
                 f", {session.parse_error_count} degraded line(s)"
                 if session.parse_error_count
@@ -236,8 +251,11 @@ def build_server(roots: list[Path] | None = None, *, redact: bool = True) -> Any
             )
             lines.append(
                 f"  {session.session_id}  source={session.source}  "
-                f"events={len(session.events)}{degraded}"
+                f"events={len(session.events)}{degraded}  "
+                f"modified={modified(session.session_id).isoformat()}"
             )
+        if end < len(sessions):
+            lines.append(f"Call ossuary_sources with start={end} to continue.")
         lines.append("")
         lines.append(
             "Redaction is " + ("on" if state.redact else "OFF -- transcripts are verbatim")
@@ -246,46 +264,58 @@ def build_server(roots: list[Path] | None = None, *, redact: bool = True) -> Any
         return "\n".join(lines)
 
     @mcp.tool()
-    def ossuary_outline(session_id: str) -> str:
-        """Every event in one session at low resolution, in order.
+    def ossuary_outline(session_id: str, start: int = 0, limit: int = 40) -> str:
+        """Page through every event in one session at low resolution, in order.
 
-        Read this in full before reading any individual event. Look down the
+        Read every page before reading any individual event. Follow the next
+        `start` until "End of outline." At most 40 events are returned per page,
+        keeping responses readable without access to host overflow files.
+        Look down the
         columns, not just across the rows: repeated identical byte counts, a
         suspiciously round number, a long duration next to an empty body, a gap
         in the timestamps, or a tool called many times in a row are all visible
         as shapes in the table.
         """
-        return state.store.outline(state.resolve(session_id))
+        return state.store.outline(
+            state.resolve(session_id), start=start, limit=min(limit, MAX_OUTLINE_SPAN)
+        )
 
     @mcp.tool()
     def ossuary_read_events(session_id: str, start: int, end: int) -> str:
         """Read full events from a session by index range.
 
-        `end` is exclusive; at most 40 events per call. Payloads are redacted
+        `end` is exclusive; at most 40 events and about 8 KB per call. Follow
+        continuation markers when a byte budget stops a page earlier.
+        Payloads are redacted
         and elided with explicit `[[ossuary:...]]` markers, which are never part
         of the original transcript.
         """
         resolved = state.resolve(session_id)
         span_end = min(end, start + MAX_EVENT_SPAN)
         body = state.store.read_events(
-            resolved, start, span_end, per_event_budget=DEFAULT_EVENT_BUDGET
+            resolved, start, span_end, per_event_budget=DEFAULT_EVENT_BUDGET,
+            max_bytes=MAX_READ_BYTES,
         )
         if end > span_end:
             body += (
                 f"\n\n[[ossuary:elided events {span_end}..{end}; "
                 f"at most {MAX_EVENT_SPAN} events per call -- "
-                f"call ossuary_read_events again from {span_end} to continue]]"
+                f"finish any byte-budget continuation through {span_end} first, "
+                f"then call ossuary_read_events again from {span_end} to continue]]"
             )
         return body
 
     @mcp.tool()
-    def ossuary_search_session(session_id: str, pattern: str) -> str:
+    def ossuary_search_session(session_id: str, pattern: str, start: int = 0) -> str:
         """Search one session's text with a Python regular expression.
 
         Use this when you have a specific hypothesis to check, rather than
-        reading forward hoping to find something.
+        reading forward hoping to find something. Follow the next `start` with
+        the same pattern when results span multiple pages.
         """
-        return state.store.search_session(state.resolve(session_id), pattern)
+        return state.store.search_session(
+            state.resolve(session_id), pattern, start=start, max_matches=20
+        )
 
     @mcp.tool()
     def ossuary_read_event_slice(

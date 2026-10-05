@@ -18,7 +18,8 @@ Your findings go into a buffer shared with everyone else working this corpus.
 Report them and finish; the agent that spawned you does the grouping and decides
 when the run is written.
 
-Read the outline in full first. It contains every event at low resolution, so
+Read the outline in full first, following each next `start` from
+`ossuary_outline` until "End of outline." It contains every event at low resolution, so
 you have already seen the whole session before deciding what deserves a closer
 look. Look down the columns, not just across the rows.
 

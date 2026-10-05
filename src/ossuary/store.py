@@ -82,9 +82,11 @@ class SessionStore:
 
     # -- read paths used by Agent A's tools ------------------------------
 
-    def outline(self, session_id: str) -> str:
+    def outline(
+        self, session_id: str, *, start: int = 0, limit: int | None = None,
+    ) -> str:
         session = self._require(session_id)
-        return self.redactor.redact_text(render_outline(session))
+        return self.redactor.redact_text(render_outline(session, start=start, limit=limit))
 
     def read_events(
         self,
@@ -93,6 +95,7 @@ class SessionStore:
         end: int,
         *,
         per_event_budget: int = DEFAULT_EVENT_BUDGET,
+        max_bytes: int | None = None,
     ) -> str:
         """Full events by index range, inclusive of `start`, exclusive of `end`."""
         session = self._require(session_id)
@@ -109,12 +112,24 @@ class SessionStore:
                 f"This session has {total} events, indices 0..{max(0, total - 1)}."
             )
 
-        blocks = [
-            f"SESSION {session_id}  events [{start}, {end})  returned {len(selected)}"
-        ]
+        blocks: list[str] = []
+        used_bytes = 0
         for event in selected:
-            blocks.append(self._render_event(event, per_event_budget))
-        return self.redactor.redact_text("\n\n".join(blocks))
+            block = self.redactor.redact_text(self._render_event(event, per_event_budget))
+            size = len(block.encode("utf-8"))
+            if max_bytes is not None and blocks and used_bytes + size > max_bytes - 500:
+                break
+            blocks.append(block)
+            used_bytes += size + 2
+        count = len(blocks)
+        header = f"SESSION {session_id}  events [{start}, {end})  returned {count}"
+        if count < len(selected):
+            blocks.append(
+                f"[[ossuary:elided remaining events for response budget; call "
+                f"ossuary_read_events with start={selected[count].index}, end={end} "
+                f"to continue]]"
+            )
+        return self.redactor.redact_text("\n\n".join([header, *blocks]))
 
     def read_event_slice(
         self,
@@ -168,10 +183,13 @@ class SessionStore:
         return self.redactor.redact_text("\n".join(body))
 
     def search_session(
-        self, session_id: str, pattern: str, *, max_matches: int = MAX_SEARCH_MATCHES
+        self, session_id: str, pattern: str, *, max_matches: int = MAX_SEARCH_MATCHES,
+        start: int = 0,
     ) -> str:
         """Regex over session text. Returns matching event indices with context."""
         session = self._require(session_id)
+        if start < 0 or start > len(session.events) or max_matches < 1:
+            raise ValueError("start must be within the session and max_matches must be positive")
         try:
             compiled = re.compile(pattern, re.MULTILINE)
         except re.error as exc:
@@ -180,6 +198,8 @@ class SessionStore:
         hits: list[str] = []
         matched_events = 0
         for event in session.events:
+            if event.index < start:
+                continue
             haystack = event.text or event.raw or ""
             if not haystack:
                 continue
@@ -191,14 +211,15 @@ class SessionStore:
                 hits.append(
                     f"  event {event.index} ({event.kind}"
                     f"{'/' + event.tool_name if event.tool_name else ''}) "
-                    f"at byte {match.start()}: {_context(haystack, match)}"
+                    f"at character {match.start()}: {elide_middle(_context(haystack, match), 240)}"
                 )
             if len(found) > 3:
                 hits.append(f"  event {event.index}: +{len(found) - 3} more match(es)")
-            if len(hits) >= max_matches:
+            if len(hits) >= max_matches and event.index + 1 < len(session.events):
                 hits.append(
-                    f"  [[ossuary:elided remaining matches; {max_matches} shown]] "
-                    f"Narrow the pattern or use read_events to continue."
+                    f"  [[ossuary:remaining events not searched; call "
+                    f"ossuary_search_session with the same pattern and "
+                    f"start={event.index + 1} to continue]]"
                 )
                 break
 

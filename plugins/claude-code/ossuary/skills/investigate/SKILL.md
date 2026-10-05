@@ -34,14 +34,16 @@ structurally cannot: read `ossuary_known_clusters`, group what came back with
 
 ## How to investigate one session
 
-1. `ossuary_outline` on the session, and **read it in full before calling
-   anything else.** Every event is in there at low resolution, which is what
+1. `ossuary_outline` on the session. Follow each next `start` until
+   "End of outline" and **read every page before other evidence tools.**
+   Every event is in there at low resolution, which is what
    makes your recall independent of what you happened to get curious about.
    Look down the columns, not just across the rows: repeated identical byte
    counts, a suspiciously round number, a long duration next to an empty body,
    a gap in the timestamps, a tool called many times in a row.
 2. `ossuary_read_events` on anything that looks off, plus enough of its
-   surroundings to understand what was happening.
+   surroundings to understand what was happening. Follow byte-budget
+   continuation markers to finish the requested range.
 3. `ossuary_search_session` when you have a specific hypothesis to check.
    `ossuary_read_event_slice` for payloads too large to read at once.
 4. `ossuary_tool_stats` **before** concluding a tool behaved abnormally. A

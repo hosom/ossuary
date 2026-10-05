@@ -10,11 +10,13 @@ for.
 from __future__ import annotations
 
 import json
+import os
+import re
 
 import anyio
 import pytest
 
-from ossuary.mcp_server import MAX_EVENT_SPAN, _State, build_server
+from ossuary.mcp_server import MAX_EVENT_SPAN, MAX_READ_BYTES, _State, build_server
 from ossuary.pipeline import read_manifest
 
 EXPECTED_TOOLS = {
@@ -111,6 +113,88 @@ class TestReads:
     def test_an_unknown_tool_name_suggests_real_ones(self, server):
         out = call(server, "ossuary_tool_stats", tool_name="NoSuchTool")
         assert "No corpus statistics" in out and "Bash" in out
+
+    def test_large_outline_pages_cover_every_event_once_and_stay_inline(self, tmp_path):
+        root = tmp_path / "paged"
+        root.mkdir()
+        records = [
+            {"type": "user.message", "data": {"content": "multibyte \u2603 " * 100}}
+            for _ in range(123)
+        ]
+        (root / "events.jsonl").write_text("\n".join(map(json.dumps, records)))
+        server = build_server([root])
+        start = 0
+        seen = []
+        while True:
+            out = call(server, "ossuary_outline", session_id="paged", start=start, limit=999)
+            # Copilot can receive both text and a structured string wrapper.
+            assert len(out.encode()) + len(json.dumps({"result": out}).encode()) < 20000
+            rows = re.findall(r"^(\d+)\s+--------", out, re.MULTILINE)
+            seen.extend(map(int, rows))
+            continuation = re.search(r"start=(\d+)", out)
+            if not continuation:
+                assert "End of outline." in out
+                break
+            start = int(continuation[1])
+        assert seen == list(range(123))
+
+    @pytest.mark.parametrize("arguments", [{"start": -1}, {"limit": 0}, {"start": 9999}])
+    def test_invalid_outline_pages_fail_explicitly(self, server, arguments):
+        with pytest.raises(Exception, match="start|limit"):
+            call(server, "ossuary_outline", session_id="sess-golden", **arguments)
+
+    def test_sources_page_by_modification_time(self, tmp_path):
+        for name, timestamp in [("old", 1000000000), ("new", 1700000000)]:
+            root = tmp_path / name
+            root.mkdir()
+            path = root / "events.jsonl"
+            path.write_text('{"type":"session.start","data":{}}\n')
+            os.utime(path, (timestamp, timestamp))
+        server = build_server([tmp_path])
+        first = call(server, "ossuary_sources", limit=1)
+        assert "new  source=copilot" in first and "old  source=copilot" not in first
+        assert "modified=2023-" in first and "start=1" in first
+        second = call(server, "ossuary_sources", start=1, limit=1)
+        assert "old  source=copilot" in second and "start=" not in second
+
+    def test_event_byte_budget_pages_without_losing_events(self, tmp_path):
+        root = tmp_path / "large"
+        root.mkdir()
+        records = [
+            {"type": "user.message", "data": {"content": "text " * 2000}}
+            for _ in range(5)
+        ]
+        (root / "events.jsonl").write_text("\n".join(map(json.dumps, records)))
+        server = build_server([root])
+        start = 0
+        seen = []
+        while start < len(records):
+            out = call(server, "ossuary_read_events", session_id="large", start=start, end=5)
+            assert len(out.encode()) <= MAX_READ_BYTES
+            seen.extend(map(int, re.findall(r"--- event (\d+) ---", out)))
+            continuation = re.search(r"start=(\d+)", out)
+            if not continuation:
+                break
+            start = int(continuation[1])
+        assert seen == list(range(5))
+
+    def test_search_pages_bound_large_matches_without_skipping_events(self, tmp_path):
+        root = tmp_path / "search"
+        root.mkdir()
+        records = [
+            {"type": "user.message", "data": {"content": "match " * 2000}}
+            for _ in range(25)
+        ]
+        (root / "events.jsonl").write_text("\n".join(map(json.dumps, records)))
+        server = build_server([root])
+        first = call(server, "ossuary_search_session", session_id="search", pattern="match.*")
+        assert len(first.encode()) < 8000
+        assert "ossuary:elided" in first and "start=20" in first
+        second = call(
+            server, "ossuary_search_session", session_id="search", pattern="match.*", start=20,
+        )
+        indices = re.findall(r"  event (\d+) ", first + second)
+        assert list(map(int, indices)) == list(range(25))
 
 
 class TestRecording:

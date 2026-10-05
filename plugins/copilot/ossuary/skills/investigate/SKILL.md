@@ -33,11 +33,13 @@ cluster id when it is the same failure mode.
 
 ## How to investigate one session
 
-1. `ossuary_outline` on the session, read in full before anything else. Every
+1. `ossuary_outline` on the session. Follow each next `start` until
+   "End of outline" and read every page before other evidence tools. Every
    event is in it at low resolution, so your recall does not depend on what you
    happened to get curious about. Look down the columns, not just across the
    rows.
 2. `ossuary_read_events` on anything that looks off, plus its surroundings.
+   Follow byte-budget continuation markers to finish the requested range.
    `ossuary_search_session` for a specific hypothesis.
    `ossuary_read_event_slice` for payloads too large to read at once.
 3. `ossuary_tool_stats` before concluding a tool behaved abnormally. Normal

@@ -50,12 +50,19 @@ Then install the plugin for whichever agent you use:
 ```
 
 ```bash
-copilot plugin install --path ./plugins/copilot/ossuary    # Copilot CLI
+copilot plugin install hosom/ossuary:plugins/copilot/ossuary
+export OSSUARY_PROJECT="$(pwd)"   # absolute path to this checkout
+copilot
 ```
 
 **There is no API key to set.** Ossuary runs no inference of its own — it hands
 your transcripts to the agent you are already talking to, which is already
 authenticated. See [docs/plugins.md](docs/plugins.md).
+
+Copilot copies the plugin subdirectory without the Python project. Keep
+`OSSUARY_PROJECT` set when launching Copilot, and restart existing sessions after
+updating the plugin. For development, `copilot --plugin-dir ./plugins/copilot/ossuary`
+uses the surrounding checkout without the override.
 
 ## Use
 
@@ -155,7 +162,9 @@ before comparing, so it constrains *which* tools an agent may hold but not
 whether the names resolve under the namespace the host actually uses: a plugin
 server the host exposes as `mcp__plugin_ossuary_ossuary__*` will not match an
 agent asking for `mcp__ossuary__*`, and the suite passes either way while every
-spawn gets an empty toolset. See [`docs/plugins.md`](docs/plugins.md).
+spawn gets an empty toolset. Copilot's grants are additionally checked for its
+`ossuary/<tool-name>` namespace, not just for the underlying tool names.
+See [`docs/plugins.md`](docs/plugins.md).
 
 **Adapters parse like archaeologists, not validators.** No line is ever rejected.
 A malformed line becomes a degraded event carrying its raw text and the parse

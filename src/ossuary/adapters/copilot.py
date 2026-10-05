@@ -20,13 +20,10 @@ not a line-per-event log::
 
 Both are handled here, dispatched on what is actually found on disk.
 
-A caveat worth stating plainly: no Copilot data existed on the machine this was
-written on, so unlike the Claude Code adapter this one is not confirmed against
-real files. It is written defensively -- structures it does not recognise become
-events carrying the raw JSON with `parse_error` set, so unfamiliar data degrades
-resolution rather than disappearing. The golden tests use synthetic fixtures
-built to the documented shape; they prove the adapter's behaviour, not the
-schema's accuracy.
+The dotted CLI event names and nested result fields were checked against local
+Copilot CLI 1.0.91 transcripts. Older CLI spellings remain supported. VS Code's
+format is still covered by synthetic fixtures only. Unrecognized structures are
+preserved with `parse_error` set rather than silently disappearing.
 """
 
 from __future__ import annotations
@@ -41,6 +38,23 @@ from typing import Any
 from ..models import NormalizedEvent, Session, SessionRef
 from ..shape import compute_shape
 from .base import Adapter, unparseable_event
+
+
+_CLI_META_EVENTS = {
+    "session.start", "session.resume", "session.model_change", "session.mode_changed",
+    "session.permissions_changed", "session.task_complete", "session.usage_checkpoint",
+    "session.error", "session.info", "session.warning", "session.shutdown",
+    "session.compaction_start", "session.compaction_complete",
+    "session.snapshot_rewind", "session.truncation", "session.idle",
+    "session.context_changed", "system.notification", "abort",
+    "skill.invoked", "skill.context_delivered_ref",
+    "assistant.turn_start", "assistant.turn_end", "assistant.usage",
+    "tool.execution_progress", "tool.execution_partial_result",
+    "model.turn_started", "model.turn_ended", "model.model_call_started",
+    "model.model_call_success", "model.model_call_failed",
+    "model.captured_assignment_context", "model.message", "model.response",
+    "model.messages_snapshot",
+}
 
 
 class CopilotAdapter(Adapter):
@@ -195,15 +209,15 @@ class CopilotAdapter(Adapter):
                 continue
 
             try:
-                events.append(
-                    self._event_for_cli_record(
-                        record,
-                        ref=ref,
-                        index=len(events),
-                        line_no=line_no,
-                        pending=pending,
-                    )
+                event = self._event_for_cli_record(
+                    record,
+                    ref=ref,
+                    index=len(events),
+                    line_no=line_no,
+                    pending=pending,
                 )
+                events.append(event)
+                errors += int(event.parse_error is not None)
             except Exception as exc:  # noqa: BLE001 - never lose a line
                 events.append(
                     unparseable_event(
@@ -233,7 +247,12 @@ class CopilotAdapter(Adapter):
         ts = self.parse_timestamp(
             record.get("timestamp") or record.get("time") or record.get("ts")
         )
-        meta: dict[str, Any] = {"line_type": event_type, "line_no": line_no + 1}
+        meta: dict[str, Any] = {
+            "line_type": event_type,
+            "line_no": line_no + 1,
+            "event_id": record.get("id"),
+            "parent_id": record.get("parentId"),
+        }
 
         body = record
         for key in ("data", "payload", "message"):
@@ -251,15 +270,32 @@ class CopilotAdapter(Adapter):
         )
         tool_name = _first_str(body, ("toolName", "tool_name", "name", "tool"))
 
-        if "tool" in event_type and ("result" in event_type or "output" in event_type or "response" in event_type):
+        if event_type == "tool.execution_complete" or (
+            event_type not in _CLI_META_EVENTS
+            and "tool" in event_type
+            and ("result" in event_type or "output" in event_type or "response" in event_type)
+        ):
             payload_text = _first_text(body, ("result", "output", "content", "text", "response"))
-            call_index, call_ts, call_name = pending.get(call_id, (None, None, None))
+            result = body.get("result")
+            if event_type == "tool.execution_complete" and isinstance(result, dict):
+                payload_text = _first_text(result, ("content",)) if "content" in result else _stringify(result)
+            if not payload_text and body.get("error"):
+                payload_text = _stringify(body["error"])
+            call_index, call_ts, call_name = pending.pop(call_id, (None, None, None))
             duration_ms, duration_source = _duration(body, call_ts, ts)
+            exit_code = _int_or_none(body, ("exitCode", "exit_code", "status", "code"))
+            shell = body.get("shellExecution")
+            if isinstance(shell, dict):
+                recorded_exit = _int_or_none(shell, ("exitCode",))
+                if recorded_exit is not None:
+                    exit_code = recorded_exit
             shape = compute_shape(
                 payload_text,
                 duration_ms=duration_ms,
-                exit_code=_int_or_none(body, ("exitCode", "exit_code", "status", "code")),
-                has_error_field=_error_signal(body),
+                exit_code=exit_code,
+                has_error_field=_error_signal(body) or (
+                    isinstance(result, dict) and _error_signal(result)
+                ),
                 duration_source=duration_source,
             )
             if call_index is not None:
@@ -267,6 +303,9 @@ class CopilotAdapter(Adapter):
             elif call_id:
                 meta["orphan_result"] = True
             meta["tool_call_id"] = call_id
+            for key in ("success", "error", "shellExecution", "toolTelemetry"):
+                if key in body:
+                    meta[key] = body[key]
             return NormalizedEvent(
                 session_id=ref.session_id,
                 source="copilot",
@@ -280,7 +319,10 @@ class CopilotAdapter(Adapter):
                 meta=meta,
             )
 
-        if "tool" in event_type and ("call" in event_type or "invoc" in event_type or "use" in event_type):
+        if event_type == "tool.execution_start" or (
+            "tool" in event_type
+            and ("call" in event_type or "invoc" in event_type or "use" in event_type)
+        ):
             if call_id:
                 pending[call_id] = (index, ts, tool_name)
             meta["tool_call_id"] = call_id
@@ -296,7 +338,7 @@ class CopilotAdapter(Adapter):
                 meta=meta,
             )
 
-        if event_type in ("user", "user_message", "prompt", "request"):
+        if event_type in ("user", "user_message", "user.message", "prompt", "request"):
             return NormalizedEvent(
                 session_id=ref.session_id,
                 source="copilot",
@@ -308,7 +350,10 @@ class CopilotAdapter(Adapter):
                 meta=meta,
             )
 
-        if event_type in ("assistant", "assistant_message", "response", "completion", "reply"):
+        if event_type in ("assistant", "assistant_message", "assistant.message", "response", "completion", "reply"):
+            for key in ("reasoningText", "reasoningBlocks", "toolRequests"):
+                if key in body:
+                    meta[key] = body[key]
             return NormalizedEvent(
                 session_id=ref.session_id,
                 source="copilot",
@@ -318,6 +363,13 @@ class CopilotAdapter(Adapter):
                 kind="message",
                 text=_first_text(body, ("text", "content", "message", "response")),
                 meta=meta,
+            )
+
+        if event_type == "system.message":
+            return NormalizedEvent(
+                session_id=ref.session_id, source="copilot", index=index, ts=ts,
+                role="system", kind="message",
+                text=_first_text(body, ("content", "text")), meta=meta,
             )
 
         if "reason" in event_type or "think" in event_type:
@@ -330,6 +382,14 @@ class CopilotAdapter(Adapter):
                 kind="thinking",
                 text=_first_text(body, ("text", "content", "reasoning")),
                 meta=meta,
+            )
+
+        if event_type in _CLI_META_EVENTS:
+            if event_type in ("abort", "session.error"):
+                meta["stop_reason"] = "aborted" if event_type == "abort" else "error"
+            return NormalizedEvent(
+                session_id=ref.session_id, source="copilot", index=index, ts=ts,
+                role="system", kind="meta", text=_stringify(body), meta=meta,
             )
 
         return NormalizedEvent(
@@ -627,11 +687,15 @@ def _int_or_none(body: dict[str, Any], keys: tuple[str, ...]) -> int | None:
 
 
 def _error_signal(body: dict[str, Any]) -> bool:
+    if body.get("success") is False:
+        return True
     for key in ("isError", "is_error", "error", "failed"):
         value = body.get(key)
         if value is True:
             return True
         if isinstance(value, str) and value.strip():
+            return True
+        if isinstance(value, dict) and value:
             return True
     stderr = body.get("stderr")
     return isinstance(stderr, str) and bool(stderr.strip())

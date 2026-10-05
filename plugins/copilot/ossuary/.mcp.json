@@ -2,12 +2,9 @@
   "mcpServers": {
     "ossuary": {
       "type": "local",
-      "command": "uv",
+      "command": "python3",
       "args": [
-        "run",
-        "--project",
-        "${CLAUDE_PLUGIN_ROOT}/../../..",
-        "ossuary-mcp"
+        "${COPILOT_PLUGIN_ROOT}/launch.py"
       ],
       "tools": [
         "*"

@@ -17,6 +17,8 @@ from __future__ import annotations
 import ast
 import json
 import re
+import runpy
+import shutil
 from pathlib import Path
 
 import anyio
@@ -59,8 +61,10 @@ def tool_names(path: Path) -> set[str]:
         names = ast.literal_eval(raw)
     else:
         names = [n.strip() for n in raw.split(",") if n.strip()]
-    # Claude Code namespaces MCP tools as mcp__<server>__<tool>.
-    return {n.rsplit("__", 1)[-1] if n.startswith("mcp__") else n for n in names}
+    return {
+        n.rsplit("__", 1)[-1] if n.startswith("mcp__") else n.rsplit("/", 1)[-1]
+        for n in names
+    }
 
 
 AGENT_FILES = [
@@ -90,18 +94,12 @@ class TestManifests:
     def test_manifest_is_valid_json(self, path: Path):
         assert json.loads(path.read_text(encoding="utf-8"))
 
-    @pytest.mark.parametrize(
-        "path", [CLAUDE / ".mcp.json", COPILOT / ".mcp.json"], ids=["claude", "copilot"]
-    )
-    def test_mcp_manifest_starts_the_published_entry_point(self, path: Path):
+    def test_mcp_manifest_starts_the_published_entry_point(self):
         """`ossuary-mcp` is the console script; a rename here breaks every install."""
-        server = json.loads(path.read_text(encoding="utf-8"))["mcpServers"]["ossuary"]
+        server = json.loads((CLAUDE / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["ossuary"]
         assert "ossuary-mcp" in server["args"]
 
-    @pytest.mark.parametrize(
-        "path", [CLAUDE / ".mcp.json", COPILOT / ".mcp.json"], ids=["claude", "copilot"]
-    )
-    def test_mcp_manifest_source_resolves_to_this_package(self, path: Path):
+    def test_mcp_manifest_source_resolves_to_this_package(self):
         """The project argument has to name something that is actually this project.
 
         This has now been got wrong twice, in two different ways, and both times
@@ -117,6 +115,7 @@ class TestManifests:
         `${CLAUDE_PLUGIN_ROOT}` must land on a real pyproject declaring the
         `ossuary-mcp` entry point the manifest goes on to invoke.
         """
+        path = CLAUDE / ".mcp.json"
         server = json.loads(path.read_text(encoding="utf-8"))["mcpServers"]["ossuary"]
         args = server["args"]
         source = args[args.index("--project") + 1]
@@ -140,10 +139,7 @@ class TestManifests:
             f"{resolved} declares no {entry_point!r} script for the manifest to run"
         )
 
-    @pytest.mark.parametrize(
-        "path", [CLAUDE / ".mcp.json", COPILOT / ".mcp.json"], ids=["claude", "copilot"]
-    )
-    def test_mcp_manifest_runs_the_checkout_rather_than_a_built_copy(self, path: Path):
+    def test_mcp_manifest_runs_the_checkout_rather_than_a_built_copy(self):
         """`uv run --project`, never `uvx --from`, and the difference is not style.
 
         `uvx --from <path>` builds the project into a cached environment keyed on
@@ -160,7 +156,7 @@ class TestManifests:
         unbounded, and a fresh resolve pulled an SDK major the code of the day
         could not import, while the lockfile pins a version that works.
         """
-        server = json.loads(path.read_text(encoding="utf-8"))["mcpServers"]["ossuary"]
+        server = json.loads((CLAUDE / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["ossuary"]
         assert server["command"] == "uv", (
             f"expected the `uv` launcher, got {server['command']!r}: `uvx` builds "
             "into a cache that does not notice source edits"
@@ -176,6 +172,50 @@ class TestManifests:
         entry = json.loads(MARKETPLACE.read_text(encoding="utf-8"))["plugins"][0]
         source = (MARKETPLACE.parent.parent / entry["source"]).resolve()
         assert (source / ".claude-plugin" / "plugin.json").exists()
+
+    def test_copilot_grants_resolve_in_the_server_namespace(self, server_tools):
+        path = COPILOT / "agents" / "session-investigator.agent.md"
+        names = ast.literal_eval(frontmatter(path)["tools"])
+        assert all(name.startswith("ossuary/") for name in names)
+        assert {name.split("/", 1)[1] for name in names} <= server_tools
+
+
+class TestCopilotLauncher:
+    def launch(self, plugin, monkeypatch):
+        manifest = json.loads((plugin / ".mcp.json").read_text())
+        server = manifest["mcpServers"]["ossuary"]
+        assert server["command"] == "python3"
+        script = server["args"][0].replace("${COPILOT_PLUGIN_ROOT}", str(plugin))
+        calls = []
+        monkeypatch.setattr("os.execvp", lambda command, args: calls.append((command, args)))
+        runpy.run_path(script, run_name="__main__")
+        return calls
+
+    def test_development_plugin_runs_its_checkout(self, monkeypatch):
+        monkeypatch.delenv("OSSUARY_PROJECT", raising=False)
+        assert self.launch(COPILOT, monkeypatch) == [
+            ("uv", ["uv", "run", "--project", str(PLUGINS.parent), "ossuary-mcp"])
+        ]
+
+    def test_copied_plugin_runs_configured_checkout_not_cache_ancestors(self, tmp_path, monkeypatch):
+        installed = tmp_path / "cache" / "_direct" / "ossuary"
+        shutil.copytree(COPILOT, installed)
+        monkeypatch.setenv("OSSUARY_PROJECT", str(PLUGINS.parent))
+        assert self.launch(installed, monkeypatch) == [
+            ("uv", ["uv", "run", "--project", str(PLUGINS.parent), "ossuary-mcp"])
+        ]
+
+    def test_copied_plugin_without_checkout_explains_how_to_fix_it(self, tmp_path, monkeypatch):
+        installed = tmp_path / "cache" / "_direct" / "ossuary"
+        shutil.copytree(COPILOT, installed)
+        monkeypatch.delenv("OSSUARY_PROJECT", raising=False)
+        with pytest.raises(SystemExit, match="Set OSSUARY_PROJECT"):
+            self.launch(installed, monkeypatch)
+
+    def test_invalid_override_does_not_silently_use_the_bundled_checkout(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OSSUARY_PROJECT", str(tmp_path))
+        with pytest.raises(SystemExit, match="checkout not found"):
+            self.launch(COPILOT, monkeypatch)
 
 
 class TestPromptsAreWellFormed:
