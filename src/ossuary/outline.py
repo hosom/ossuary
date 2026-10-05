@@ -49,7 +49,15 @@ _PREVIEW_CHARS = 30
 _TOOL_WIDTH = 12
 
 
-def render_outline(session: Session, *, preview_chars: int = _PREVIEW_CHARS) -> str:
+def render_outline(
+    session: Session, *, preview_chars: int = _PREVIEW_CHARS,
+    start: int = 0, limit: int | None = None,
+) -> str:
+    if start < 0 or start > len(session.events):
+        raise ValueError(f"start must be between 0 and {len(session.events)}")
+    if limit is not None and limit < 1:
+        raise ValueError("limit must be positive")
+    end = len(session.events) if limit is None else min(start + limit, len(session.events))
     lines = [
         f"SESSION {session.session_id}  source={session.source}  "
         f"events={len(session.events)}",
@@ -58,16 +66,25 @@ def render_outline(session: Session, *, preview_chars: int = _PREVIEW_CHARS) -> 
         lines.append(f"project: {session.project}")
     if session.parse_error_count:
         lines.append(
-            f"NOTE: {session.parse_error_count} line(s) failed to parse and appear "
-            f"below as kind=BAD. Their raw text is readable via read_events."
+            f"NOTE: {session.parse_error_count} line(s) failed to parse or normalize "
+            f"and are flagged P below. Their text is readable via read_events."
         )
+    if limit is not None:
+        lines.append(f"Outline events [{start}, {end}) of {len(session.events)}")
     lines.append("")
     lines.append(_HEADER)
     lines.append(_RULE)
-    for event in session.events:
+    for event in session.events[start:end]:
         lines.append(_render_row(event, preview_chars=preview_chars))
     lines.append(_RULE)
     lines.append(_legend(session))
+    if end < len(session.events):
+        lines.append(
+            f"[[ossuary:more outline events; call ossuary_outline with "
+            f"start={end} to continue. Read every page before investigating.]]"
+        )
+    elif limit is not None:
+        lines.append("End of outline.")
     return "\n".join(lines)
 
 

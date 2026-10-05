@@ -178,9 +178,31 @@ session with a `requests` array, not a line-per-event log:
 
 Also searched: Code - Insiders, VSCodium, Cursor.
 
-The adapter handles both, dispatching on what it finds. Neither was available on
-this machine, so **this adapter is unverified against real data.** It is written
-defensively: unrecognised structures become events carrying the raw JSON with
+The adapter handles both, dispatching on what it finds. **CLI event shapes were
+verified against local Copilot CLI 1.0.91 sessions on 2026-10-05**; VS Code remains
+covered only by synthetic fixtures. Regression cases use invented payloads, not
+private transcripts.
+
+Current CLI records use dotted `type` names with a `data` object:
+
+| Type | Normalized behavior |
+| --- | --- |
+| `user.message`, `assistant.message`, `system.message` | Message text from `data.content` |
+| `tool.execution_start` | Tool name and arguments, keyed by `data.toolCallId` |
+| `tool.execution_complete` | Actual `data.result.content`, joined by tool-call ID |
+| Known session, model and turn lifecycle events | Preserved metadata, not duplicate messages or tool calls |
+| Unknown event types | Preserved JSON, parse-error flag and degraded-event count |
+
+Results can arrive out of order. `data.shellExecution.exitCode` supplies a real
+exit code, including zero; `success: false` or a structured error flags a failure
+but never invents an exit code. Recorded durations take precedence over derived
+call/result timestamp gaps. `toolTelemetry.metrics.commandTimeout` is a timeout
+setting, not elapsed time. Empty result content stays empty rather than being
+measured as the JSON wrapper. Assistant `toolRequests` and model telemetry are
+not counted as additional executed calls.
+
+Older undotted CLI spellings remain supported. Unrecognised structures become
+events carrying the raw JSON with
 `parse_error` set. A whole VS Code document that fails to parse becomes a single
 `unparseable` event rather than an empty session, because an empty session reads
 downstream as "nothing happened here" — a very different and much more
